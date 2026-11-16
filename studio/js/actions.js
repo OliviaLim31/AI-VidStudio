@@ -26,7 +26,7 @@ $('undoBtn').onclick = () => { if (!history.length) return; project = JSON.parse
 let resetArmed = false;
 $('resetBtn').onclick = () => {
   if (!resetArmed) { resetArmed = true; $('resetBtn').textContent = '再按一次确认'; setTimeout(() => { resetArmed = false; $('resetBtn').textContent = '还原'; }, 3000); return; }
-  resetArmed = false; $('resetBtn').textContent = '还原'; commit(); project = clone(BASE); rebuildAllGenerated(); selSeg = 0; selText = -1; selAudio = -1; refresh(true); toast('已还原成第一版，按撤销可以回去');
+  resetArmed = false; $('resetBtn').textContent = '还原'; commit(); project = clone(BASE); selSeg = 0; selText = -1; selAudio = -1; refresh(true); toast('已还原成第一版，按撤销可以回去');
 };
 $('playBtn').onclick = () => { if (!playing && gTime >= total() - 0.05) gTime = 0; setPlaying(!playing); };
 $('restartBtn').onclick = () => seek(0);
@@ -34,11 +34,9 @@ $('soundBtn').onclick = () => { muted = !muted; $('soundBtn').textContent = mute
 $('safeChk').onchange = e => document.querySelectorAll('.safe').forEach(s => s.style.display = e.target.checked ? 'block' : 'none');
 $('zoom').oninput = e => { zoom = parseFloat(e.target.value); renderTimeline(); };
 $('stage').addEventListener('pointerdown', e => {
-  if (e.target.closest('.pill,.ov-cap,.ov-stk,#frameUI')) return;
+  if (e.target.closest('.pill,#frameUI')) return;
   let changed = false;
   if (selText !== -1) { selText = -1; changed = true; }
-  if (tab === 'stk' && selStk !== -1) { selStk = -1; changed = true; }
-  if (tab === 'cap' && selCap !== -1) { selCap = -1; changed = true; }
   if (tab === 'seg' && selSeg !== segAt(gTime).i) { selSeg = segAt(gTime).i; changed = true; renderTimeline(); }
   if (changed) { renderInspector(); markStage(); applyFrame(false); }
 });

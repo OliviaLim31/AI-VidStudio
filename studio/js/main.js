@@ -21,5 +21,5 @@ renderTimeline(); renderInspector(); markDirty();
     }
   } catch (e) {}
 })();
-document.fonts && document.fonts.ready.then(() => { rebuildAllGenerated(); markStage(); });
+document.fonts && document.fonts.ready.then(() => { markStage(); });
 requestAnimationFrame(t => { lastTick = t; tick(t); });

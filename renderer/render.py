@@ -14,11 +14,10 @@ Pipeline
   1. each clip -> its own 1080x1920 file: frame (move / crop / zoom / rotate / border / shadow),
      background, clip texts
   2. clips joined with xfade / acrossfade transitions (or plain cuts)
-  3. global overlay (badge, word-by-word captions, stickers) drawn frame by frame and piped in,
-     mixed with sound effects, voice and music, loudness-normalised.
-Timing, geometry and animation curves mirror studio/js/core.js — keep them in sync.
+  3. badge on top, mixed with sound effects, voice and music, loudness-normalised.
+Timing, frame geometry and transition shapes mirror studio/js/core.js — keep them in sync.
 """
-import argparse, glob, hashlib, json, math, os, subprocess, sys
+import argparse, glob, json, math, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -161,7 +160,7 @@ def migrate(p):
                 s["bg"] = "lav" if s.get("bgc") == "lav" else "black"
             s.setdefault("trans", {"type": "none", "dur": 0.5})
         p["version"] = 3
-    for k in ("audio", "captions", "stickers"):
+    for k in ("audio",):
         p.setdefault(k, [])
     p.setdefault("mix", {"videoVolume": 1})
     return p
@@ -189,38 +188,6 @@ def starts(segs, durs=None):
             t = t + d[k - 1] - trans_duration(segs, k, d)
         out.append(t)
     return out
-
-
-def ease_out_back(x):
-    c1 = 1.70158; c3 = c1 + 1
-    return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2
-
-
-def sticker_anim(st, t):
-    a = dict(dy=0.0, scale=1.0, rot=0.0, alpha=1.0)
-    if st.get("popIn") and t < 0.3:
-        x = t / 0.3; a["scale"] = max(0.0, ease_out_back(x)); a["alpha"] = min(1.0, x * 2)
-    anim = st.get("anim") or "none"
-    if anim == "float":
-        a["dy"] = -10 * math.sin(2 * math.pi * t / 1.6)
-    elif anim == "spin":
-        a["rot"] = 120 * t
-    elif anim == "twinkle":
-        w = math.sin(2 * math.pi * t * 1.4); a["scale"] *= 1 + 0.12 * w; a["alpha"] *= 0.8 + 0.2 * w
-    elif anim == "wiggle":
-        a["rot"] = 8 * math.sin(2 * math.pi * t * 1.2)
-    elif anim == "click":
-        ph = t % 1.4
-        if 0.55 < ph < 0.75:
-            a["scale"] *= 0.86
-    return a
-
-
-def caption_anim(cap, t):
-    if cap.get("anim") != "pop" or t >= 0.15:
-        return 1.0, 1.0
-    x = t / 0.15
-    return 0.8 + 0.2 * ease_out_back(x), min(1.0, x * 1.5)
 
 
 # ---------------------------------------------------------------- helpers
@@ -257,17 +224,6 @@ def gradient_bg(kind):
         t = y / (H - 1)
         px[0, y] = tuple(int(top[k] + (bot[k] - top[k]) * t) for k in range(3))
     return img.resize((W, H)).convert("RGBA")
-
-
-def rasterize_svg(svg, w, h, work):
-    w, h = max(1, int(round(w))), max(1, int(round(h)))
-    key = hashlib.md5((svg + f"{w}x{h}").encode()).hexdigest()[:16]
-    png = os.path.join(work, f"svg_{key}.png")
-    if not os.path.exists(png):
-        sp = os.path.join(work, f"svg_{key}.svg")
-        open(sp, "w", encoding="utf-8").write(svg)
-        run(["rsvg-convert", "-w", str(w), "-h", str(h), "-o", png, sp])
-    return Image.open(png).convert("RGBA")
 
 
 def badge_img(text):
@@ -410,54 +366,6 @@ def join_segments(files, segs, work):
     return out, st, durs
 
 
-# ---------------------------------------------------------------- 3. overlay track
-def overlay_frames(p, total, work):
-    """Yield (n_frames, generator of RGBA frame bytes) for badge + captions + stickers, or None."""
-    caps, stks = p.get("captions", []), p.get("stickers", [])
-    badge = p.get("badge", {}).get("on", True)
-    if not (caps or stks or badge):
-        return None
-    base = badge_img(p["badge"].get("text", "Made with Picsart")) if badge else Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    cap_imgs = {(ci, k): rasterize_svg(ch["svg"], ch["w"], ch["h"], work) for ci, c in enumerate(caps) for k, ch in enumerate(c.get("chunks", []))}
-    stk_imgs = {si: rasterize_svg(st["svg"], st["w"] * st["scale"], st["h"] * st["scale"], work) for si, st in enumerate(stks) if st.get("svg")}
-    n = int(round(total * FPS))
-
-    def frames():
-        prev_key, prev_bytes = None, None
-        for fi in range(n):
-            t = fi / FPS
-            items = []
-            for ci, c in enumerate(caps):
-                if not (c["start"] <= t < c["end"]):
-                    continue
-                for k, ch in enumerate(c.get("chunks", [])):
-                    if ch["t0"] <= t < ch["t1"]:
-                        sc, al = caption_anim(c, t - ch["t0"])
-                        items.append(("c", ci, k, round(sc, 3), round(al, 3), c["x"], c["y"] + ch["h"] / 2, 0.0))
-                        break
-            for si, st in enumerate(stks):
-                if si in stk_imgs and st["start"] <= t < st["end"]:
-                    a = sticker_anim(st, t - st["start"])
-                    items.append(("s", si, 0, round(a["scale"], 3), round(a["alpha"], 3), st["x"], st["y"] + round(a["dy"], 1), round((st.get("rot") or 0) + a["rot"], 1)))
-            key = tuple(items)
-            if key != prev_key:
-                canvas = base.copy()
-                for kind, a_, b_, sc, al, cx, cy, rot in items:
-                    img = cap_imgs[(a_, b_)] if kind == "c" else stk_imgs[a_]
-                    if sc <= 0.01 or al <= 0.01:
-                        continue
-                    if abs(sc - 1) > 1e-3:
-                        img = img.resize((max(1, int(img.width * sc)), max(1, int(img.height * sc))), Image.BICUBIC)
-                    if abs(rot) > 0.05:
-                        img = img.rotate(-rot, resample=Image.BICUBIC, expand=True)
-                    if al < 0.999:
-                        img = img.copy(); img.putalpha(img.getchannel("A").point(lambda v: int(v * al)))
-                    paste_center(canvas, img, cx, cy)
-                prev_key, prev_bytes = key, canvas.tobytes()
-            yield prev_bytes
-    return n, frames()
-
-
 # ---------------------------------------------------------------- main
 PROJECT = {}
 
@@ -477,19 +385,18 @@ def render(project_path, out_path):
     p = PROJECT = load_project(project_path)
     work = os.path.join(os.path.dirname(os.path.abspath(out_path)), ".render_work"); os.makedirs(work, exist_ok=True)
     for f in glob.glob(os.path.join(work, "*")):
-        if not os.path.basename(f).startswith("svg_"):
-            os.remove(f)
+        os.remove(f)
     segs = p["segments"]
     files = [render_segment(i, s, seg_duration(s), work) for i, s in enumerate(segs)]
     joined, st, durs = join_segments(files, segs, work)
     total = st[-1] + durs[-1]
 
     inputs, fc, labels = ["-i", joined], [], ["[0:a]"]
-    ov = overlay_frames(p, total, work)
     vlabel = "0:v"
-    if ov:
-        inputs += ["-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "pipe:0"]
-        fc.append("[0:v][1:v]overlay=0:0:format=auto:eof_action=pass,format=yuv420p[vout]"); vlabel = "[vout]"
+    if p.get("badge", {}).get("on", True):
+        bpath = os.path.join(work, "badge.png"); badge_img(p["badge"].get("text", "Made with Picsart")).save(bpath)
+        inputs += ["-loop", "1", "-i", bpath]
+        fc.append("[0:v][1:v]overlay=0:0:shortest=1,format=yuv420p[vout]"); vlabel = "[vout]"
     n = inputs.count("-i")
     for k in range(1, len(segs)):
         kind = segs[k].get("sfx", "none")
@@ -523,17 +430,7 @@ def render(project_path, out_path):
     cmd = ["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(fc), "-map", vlabel, "-map", "[a]",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(FPS),
            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", f"{total:.3f}", out_path]
-    errlog = open(os.path.join(work, "final.log"), "w")
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE if ov else None, stderr=errlog)
-    if ov:
-        try:
-            for frame in ov[1]:
-                proc.stdin.write(frame)
-        except BrokenPipeError:
-            pass
-        proc.stdin.close()
-    if proc.wait():
-        errlog.close(); sys.exit("final ffmpeg failed:\n" + open(os.path.join(work, "final.log")).read()[-2500:])
+    run(cmd)
     print(f"{out_path}  {total:.2f}s")
     if missing:
         print("MISSING AUDIO:", ", ".join(missing))

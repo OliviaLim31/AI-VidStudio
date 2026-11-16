@@ -131,3 +131,5 @@ code { background: var(--lav); padding: 1px 5px; border-radius: 5px; }
 header { z-index: 100; }
 .tl-scroll { position: relative; isolation: isolate; }
 .trans-mk { z-index: 40; }
+details.more { margin: 8px 0; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; background: #fdfbff; }
+details.more > summary { cursor: pointer; color: var(--purple); font-weight: 700; font-size: 13px; padding: 4px 0; }

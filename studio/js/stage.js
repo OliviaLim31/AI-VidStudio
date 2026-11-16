@@ -1,5 +1,5 @@
 /* AI-VidStudio · stage.js — draws the canvas: clip slots, frames, transitions,
- * segment texts, captions, stickers, badge; and the on-canvas editing handles. */
+ * segment texts, badge; and the on-canvas editing handles. */
 'use strict';
 let lastKey = '';
 function markStage() { lastKey = ''; slots.forEach(s => s.key = ''); ovKey = ''; }
@@ -160,72 +160,16 @@ function dragText(e, i, k, node, mode) {
   }, moved => { if (moved) { save(); renderInspector(); } markStage(); applyFrame(false); });
 }
 
-/* ---------- global overlay: badge, captions, stickers ---------- */
+/* ---------- global overlay: badge ---------- */
 let ovKey = '';
-const ovNodes = {};
-function renderOverlay(t) {
-  const s = S(), layer = $('ovLayer');
-  const caps = [];
-  project.captions.forEach((c, ci) => { if (t < c.start || t >= c.end) return; const k = (c.chunks || []).findIndex(ch => t >= ch.t0 && t < ch.t1); if (k >= 0) caps.push({ c, ci, ch: c.chunks[k], k }); });
-  const stks = project.stickers.map((st, si) => ({ st, si })).filter(({ st }) => t >= st.start && t < st.end);
-  const key = [project.badge.on, project.badge.text, s, tab, selCap, selStk, caps.map(x => x.ci + ':' + x.k + ':' + x.c.x + ':' + x.c.y).join(','), stks.map(x => x.si + ':' + x.st.svg.length + x.st.color + x.st.scale + x.st.x + x.st.y + x.st.rot).join(',')].join('|');
-  if (key !== ovKey && !interacting) {
-    ovKey = key; layer.innerHTML = '';
-    if (project.badge.on) {
-      const b = el('div', 'badge'); b.textContent = project.badge.text;
-      Object.assign(b.style, { left: 40 * s + 'px', top: 150 * s + 'px', fontSize: 30 * s + 'px', padding: `${12 * s}px ${22 * s}px`, borderRadius: 30 * s + 'px' });
-      layer.appendChild(b);
-    }
-    for (const { c, ci, ch } of caps) {
-      const n = el('div', 'ov-cap' + (tab === 'cap' && ci === selCap ? ' sel' : ''), ch.svg);
-      n.dataset.cap = ci; Object.assign(n.style, { left: (c.x - ch.w / 2) * s + 'px', top: c.y * s + 'px', width: ch.w * s + 'px', height: ch.h * s + 'px' });
-      const sv = n.querySelector('svg'); sv.setAttribute('width', '100%'); sv.setAttribute('height', '100%');
-      n.addEventListener('pointerdown', e => dragCaption(e, ci, n));
-      layer.appendChild(n); ovNodes['c' + ci] = n;
-    }
-    for (const { st, si } of stks) {
-      const n = el('div', 'ov-stk' + (tab === 'stk' && si === selStk ? ' sel' : ''), st.svg);
-      n.dataset.stk = si;
-      const w = st.w * st.scale, h = st.h * st.scale;
-      Object.assign(n.style, { left: (st.x - w / 2) * s + 'px', top: (st.y - h / 2) * s + 'px', width: w * s + 'px', height: h * s + 'px' });
-      const sv = n.querySelector('svg'); sv.setAttribute('width', '100%'); sv.setAttribute('height', '100%');
-      if (tab === 'stk' && si === selStk) {
-        const hr = el('div', 'h-rot'), hs = el('div', 'h-scale'); n.append(hr, hs);
-        hr.addEventListener('pointerdown', e => dragSticker(e, si, n, 'rot'));
-        hs.addEventListener('pointerdown', e => dragSticker(e, si, n, 'scale'));
-      }
-      n.addEventListener('pointerdown', e => dragSticker(e, si, n, 'move'));
-      layer.appendChild(n); ovNodes['s' + si] = n;
-    }
-  }
-  // per-frame animation
-  for (const { c, ci, ch } of caps) { const n = ovNodes['c' + ci]; if (!n) continue; const a = captionAnim(c, t - ch.t0); n.style.transform = `scale(${a.scale})`; n.style.opacity = a.alpha; }
-  for (const { st, si } of stks) { const n = ovNodes['s' + si]; if (!n) continue; const a = stickerAnim(st, t - st.start); n.style.transform = `translateY(${a.dy * s}px) rotate(${(st.rot || 0) + a.rot}deg) scale(${a.scale})`; n.style.opacity = a.alpha; }
-}
-function dragCaption(e, ci, n) {
-  const c = project.captions[ci], s = S();
-  if (tab !== 'cap' || selCap !== ci) { e.preventDefault(); e.stopPropagation(); tab = 'cap'; selCap = ci; renderInspector(); renderTimeline(); ovKey = ''; applyFrame(false); return; }
-  const o = { x: c.x, y: c.y };
-  dragGesture(e, (dx, dy) => {
-    let nx = o.x + dx / s; const snap = Math.abs(nx - 540) < 14; if (snap) nx = 540;
-    c.x = Math.round(nx); c.y = Math.round(clamp(o.y + dy / s, -100, 1900));
-    $('guide').style.display = snap ? 'block' : 'none';
-    const ch = c.chunks.find(x => x.svg && n.innerHTML.length) || c.chunks[0];
-    n.style.left = (c.x - parseFloat(n.style.width) / s / 2) * s + 'px'; n.style.top = c.y * s + 'px';
-  }, moved => { if (moved) { save(); renderInspector(); } ovKey = ''; applyFrame(false); });
-}
-function dragSticker(e, si, n, mode) {
-  const st = project.stickers[si], s = S();
-  if (tab !== 'stk' || selStk !== si) { e.preventDefault(); e.stopPropagation(); tab = 'stk'; selStk = si; renderInspector(); renderTimeline(); ovKey = ''; applyFrame(false); return; }
-  const r = n.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  const o = { x: st.x, y: st.y, scale: st.scale, dist: Math.hypot(e.clientX - cx, e.clientY - cy) || 1 };
-  dragGesture(e, (dx, dy, ev) => {
-    if (mode === 'move') { st.x = Math.round(o.x + dx / s); st.y = Math.round(o.y + dy / s); }
-    else if (mode === 'rot') { let a = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI + 90; if (a > 180) a -= 360; if (Math.abs(a) < 4) a = 0; st.rot = Math.round(a); }
-    else st.scale = r2(clamp(o.scale * Math.hypot(ev.clientX - cx, ev.clientY - cy) / o.dist, 0.1, 6));
-    const w = st.w * st.scale, h = st.h * st.scale;
-    Object.assign(n.style, { left: (st.x - w / 2) * s + 'px', top: (st.y - h / 2) * s + 'px', width: w * s + 'px', height: h * s + 'px', transform: `rotate(${st.rot}deg)` });
-  }, moved => { if (moved) { save(); renderInspector(); } ovKey = ''; applyFrame(false); });
+function renderOverlay() {
+  const s = S(), key = [project.badge.on, project.badge.text, s].join('|');
+  if (key === ovKey) return;
+  ovKey = key; const layer = $('ovLayer'); layer.innerHTML = '';
+  if (!project.badge.on) return;
+  const b = el('div', 'badge'); b.textContent = project.badge.text;
+  Object.assign(b.style, { left: 40 * s + 'px', top: 150 * s + 'px', fontSize: 30 * s + 'px', padding: `${12 * s}px ${22 * s}px`, borderRadius: 30 * s + 'px' });
+  layer.appendChild(b);
 }
 
 /* ---------- frame editing UI (片段 tab): move / resize / crop / rotate the video frame ---------- */

@@ -1,8 +1,8 @@
-/* AI-VidStudio · timeline.js — lanes: clips (with transitions), captions, stickers, voice, music */
+/* AI-VidStudio · timeline.js — lanes: clips (with transitions), voice, music */
 'use strict';
 let zoom = 1, dragPPS = 0;
 function tlLen() {
-  return Math.max(total(), ...project.audio.map(c => c.start + clipDur(c)), ...project.captions.map(c => c.end), ...project.stickers.map(s => s.end), 1);
+  return Math.max(total(), ...project.audio.map(c => c.start + clipDur(c)), 1);
 }
 function pps() { if (dragPPS) return dragPPS; const w = $('tlScroll').clientWidth - 4; return (w / tlLen()) * zoom; }
 const TRANS_ICON = { none: '＋', fade: '◐', slideleft: '⇠', slideup: '⇡', wipe: '▌', smooth: '▒', circle: '◯', zoom: '⊕', flash: '✦', blur: '◌', liquid: '💗', star: '⭐' };
@@ -55,19 +55,6 @@ function renderTimeline() {
   });
   tl.appendChild(lane);
 
-  // captions
-  const cl = el('div', 'lane small');
-  if (!project.captions.length) cl.innerHTML = '<div class="lane-empty">💬 字幕：在"字幕"分页加</div>';
-  project.captions.forEach((c, j) => cl.appendChild(laneBlock('cap', c.start * P, (c.end - c.start) * P, '💬 ' + c.text.replace(/\*/g, ''), tab === 'cap' && j === selCap,
-    e => moveItem(e, c, 'move', () => { tab = 'cap'; selCap = j; }), (e, side) => moveItem(e, c, side, () => { tab = 'cap'; selCap = j; }))));
-  tl.appendChild(cl);
-  // stickers
-  const sk = el('div', 'lane small');
-  if (!project.stickers.length) sk.innerHTML = '<div class="lane-empty">✨ 贴纸：在"贴纸"分页加</div>';
-  project.stickers.forEach((s, j) => sk.appendChild(laneBlock('stk', s.start * P, (s.end - s.start) * P, '✨ ' + (STICKERS[s.type] ? STICKERS[s.type].label : s.type) + (s.text ? ' · ' + s.text : ''), tab === 'stk' && j === selStk,
-    e => moveItem(e, s, 'move', () => { tab = 'stk'; selStk = j; }), (e, side) => moveItem(e, s, side, () => { tab = 'stk'; selStk = j; }))));
-  tl.appendChild(sk);
-
   // audio lanes: voice + music
   for (const [kind, label] of [['voice', '🎙 人声'], ['music', '🎵 音乐']]) {
     const al = el('div', 'lane small audio');
@@ -98,18 +85,6 @@ function trimSeg(e, i, side) {
     renderTimeline();
     gTime = segStart(i) + (side === 'l' ? 0 : segDur(s) - 0.01); interacting = false; applyFrame(true); interacting = true;
   }, () => { dragPPS = 0; refresh(true); });
-}
-function moveItem(e, it, mode, select) { // captions & stickers: start/end on the timeline
-  select(); dragPPS = pps(); const P = dragPPS; const o = { start: it.start, end: it.end };
-  renderInspector();
-  dragGesture(e, dx => {
-    const dt = dx / P;
-    if (mode === 'move') { const d = o.end - o.start; it.start = r2(Math.max(0, o.start + dt)); it.end = r2(it.start + d); }
-    else if (mode === 'l') it.start = r2(clamp(o.start + dt, 0, o.end - 0.2));
-    else it.end = r2(Math.max(o.start + 0.2, o.end + dt));
-    if (it.chunks) buildCaption(it);
-    renderTimeline();
-  }, moved => { dragPPS = 0; refresh(true); if (!moved) { const r = $('tl').getBoundingClientRect(); seek((e.clientX - r.left) / P); } });
 }
 function moveClip(e, j, mode) {
   const c = project.audio[j]; dragPPS = pps(); const P = dragPPS;

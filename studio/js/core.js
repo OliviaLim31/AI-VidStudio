@@ -1,6 +1,6 @@
 /* AI-VidStudio · core.js — shared state, timing, geometry and animation maths.
  * Everything that the renderer must reproduce (timing, frame geometry, transition
- * shapes, sticker/caption animation curves) lives here and is mirrored in
+ * shapes) lives here and is mirrored in
  * renderer/render.py. Keep the two in sync. */
 'use strict';
 const STORE_KEY = 'olivia-studio-v3-keyboard';
@@ -46,12 +46,9 @@ function migrate(p) {
       s.trans = s.trans || { type: 'none', dur: 0.5 };
       for (const k of ['vs', 'vx', 'vy', 'ph', 'cropY', 'bgc', 'layout']) delete s[k];
     }
-    p.captions = p.captions || [];
-    p.stickers = p.stickers || [];
     p.version = 3;
   }
   p.audio = p.audio || []; p.styles = p.styles || []; p.mix = p.mix || { videoVolume: 1 };
-  p.captions = p.captions || []; p.stickers = p.stickers || [];
   for (const [k, src] of Object.entries(p.sources)) if (!src.aspect) src.aspect = /screen/.test(k) ? 2796 / 1290 : 16 / 9;
   return p;
 }
@@ -64,8 +61,8 @@ try {
   const s = localStorage.getItem(STORE_KEY);
   if (s) { const o = JSON.parse(s); if (o && o.p && o.p.segments) project = migrate(o.p); if (o && o.meta) meta = o.meta; }
 } catch (e) {}
-let history = [], selSeg = 0, selText = -1, selAudio = -1, selCap = -1, selStk = -1, tab = 'seg';
-let playing = false, gTime = 0, lastTick = 0, muted = true, interacting = false, frameMode = 'frame';
+let history = [], selSeg = 0, selText = -1, selAudio = -1, tab = 'seg';
+let playing = false, gTime = 0, lastTick = 0, muted = true, interacting = false, frameMode = 'frame', frameMore = false;
 
 /* ---------- timing (mirrored in render.py: seg_duration / trans_duration / starts) ---------- */
 const segDur = s => s.freeze ? (s.out - s.in) : (s.out - s.in) / (s.speed || 1);
@@ -92,24 +89,6 @@ function activeAt(t) {
   return { act: act.slice(-2), trans };
 }
 function segAt(t) { const { act } = activeAt(t); return act[act.length - 1]; }
-
-/* ---------- animation curves (mirrored in render.py) ---------- */
-function easeOutBack(x) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
-function stickerAnim(st, t) {
-  const a = { dx: 0, dy: 0, scale: 1, rot: 0, alpha: 1 };
-  if (st.popIn && t < 0.3) { const x = t / 0.3; a.scale = Math.max(0, easeOutBack(x)); a.alpha = Math.min(1, x * 2); }
-  const anim = st.anim || 'none';
-  if (anim === 'float') a.dy = -10 * Math.sin(2 * Math.PI * t / 1.6);
-  else if (anim === 'spin') a.rot = 120 * t;
-  else if (anim === 'twinkle') { const w = Math.sin(2 * Math.PI * t * 1.4); a.scale *= 1 + 0.12 * w; a.alpha *= 0.8 + 0.2 * w; }
-  else if (anim === 'wiggle') a.rot = 8 * Math.sin(2 * Math.PI * t * 1.2);
-  else if (anim === 'click') { const ph = t % 1.4; if (ph > 0.55 && ph < 0.75) a.scale *= 0.86; }
-  return a;
-}
-function captionAnim(cap, t) { // t = time since the chunk appeared
-  if (cap.anim !== 'pop' || t >= 0.15) return { scale: 1, alpha: 1 };
-  const x = t / 0.15; return { scale: 0.8 + 0.2 * easeOutBack(x), alpha: Math.min(1, x * 1.5) };
-}
 
 /* ---------- transition shapes (normalised by canvas width, centre origin) ---------- */
 function liquidWobble(a, t) { return 0.07 * Math.sin(5 * a + 7 * t) + 0.04 * Math.sin(3 * a - 5 * t); }
