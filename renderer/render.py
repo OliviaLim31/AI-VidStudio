@@ -267,10 +267,10 @@ def render_segment(i, s, dur, work):
         base = f"[0:v]setpts=PTS/{speed},fps={FPS},setsar=1"
 
     def sized(label, CW, CH, sharpen=False):
-        """scale the source to the content size (+ slow zoom for freeze frames)"""
+        """scale the source to the content size"""
         chain = f"{label}scale={CW}:{CH}:flags=lanczos" + (",unsharp=5:5:0.4" if sharpen else "") + ",setsar=1"
         if s.get("freeze"):
-            chain += f",zoompan=z='1+0.0008*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CW}x{CH}:fps={FPS}"
+            chain += f",fps={FPS}"  # still picture; zoompan's integer steps made it shake
         return chain
 
     if full:

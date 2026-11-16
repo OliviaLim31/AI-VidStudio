@@ -19,7 +19,7 @@ function layoutSlot(sl, i, local) {
   sl.bg.style.filter = dim; sl.frame.style.filter = dim;
   for (const [k, v] of Object.entries(sl.vids)) {
     if (k !== seg.src) { if (v.style.display !== 'none') { v.pause(); v.style.display = 'none'; } continue; }
-    const z = seg.freeze ? 1 + 0.024 * local : 1;
+    const z = 1; // freeze frames stay still (no slow zoom: it made the picture shake in the render)
     Object.assign(v.style, { display: 'block', left: c.x * s + 'px', top: c.y * s + 'px', width: c.w * s + 'px', height: c.w * src.aspect * s + 'px', transform: `scale(${z})` });
   }
   // extra frames: canvases that mirror the main video
@@ -47,7 +47,7 @@ function layoutSlot(sl, i, local) {
 function drawExtras(sl, i, local) {
   const seg = project.segments[i]; if (!seg.extra || !seg.extra.length || !sl.extras) return;
   const v = sl.vids[seg.src], src = project.sources[seg.src], s = S(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const z = seg.freeze ? 1 + 0.024 * local : 1;
+  const z = 1; // freeze frames stay still (no slow zoom: it made the picture shake in the render)
   seg.extra.forEach((x, k) => {
     const e = sl.extras[k]; if (!e) return; const g = e.cv.getContext('2d'), c = x.content, k2 = s * dpr;
     g.fillStyle = x.frame.fill || '#000'; g.fillRect(0, 0, e.cv.width, e.cv.height);
