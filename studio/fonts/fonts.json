@@ -1,0 +1,42 @@
+{
+ "display-black": {
+  "label": "Inter Display Black（超粗）",
+  "file": "fonts/InterDisplay-Black.otf"
+ },
+ "display-black-i": {
+  "label": "Inter Display Black Italic（超粗斜体）",
+  "file": "fonts/InterDisplay-BlackItalic.otf"
+ },
+ "inter-xb": {
+  "label": "Inter ExtraBold（粗）",
+  "file": "fonts/Inter-ExtraBold.otf"
+ },
+ "inter-sb": {
+  "label": "Inter SemiBold（中粗）",
+  "file": "fonts/Inter-SemiBold.otf"
+ },
+ "poppins-b": {
+  "label": "Poppins Bold（圆润）",
+  "file": "fonts/Poppins-Bold.ttf"
+ },
+ "poppins-m": {
+  "label": "Poppins Medium（圆润细）",
+  "file": "fonts/Poppins-Medium.ttf"
+ },
+ "adventor-b": {
+  "label": "Adventor Bold（Y2K 几何）",
+  "file": "fonts/texgyreadventor-bold.otf"
+ },
+ "adventor-bi": {
+  "label": "Adventor Bold Italic（Y2K 斜体）",
+  "file": "fonts/texgyreadventor-bolditalic.otf"
+ },
+ "lora": {
+  "label": "Lora（优雅衬线）",
+  "file": "fonts/Lora-Variable.ttf"
+ },
+ "lora-i": {
+  "label": "Lora Italic（优雅斜体）",
+  "file": "fonts/Lora-Italic-Variable.ttf"
+ }
+}
