@@ -34,6 +34,18 @@ $('soundBtn').onclick = () => { muted = !muted; $('soundBtn').textContent = mute
 $('safeChk').onchange = e => document.querySelectorAll('.safe').forEach(s => s.style.display = e.target.checked ? 'block' : 'none');
 $('stage').addEventListener('pointerdown', e => {
   if (e.target.closest('.pill,#frameUI')) return;
+  if (tab === 'seg' && !playing) { // click / drag on any frame of the clip under the playhead
+    const i = segAt(gTime).i, seg = project.segments[i], st = $('stage').getBoundingClientRect(), s = S();
+    const px = (e.clientX - st.left) / s, py = (e.clientY - st.top) / s;
+    for (let k = frameCount(seg) - 1; k >= 0; k--) {
+      const f = frameAt(seg, k).f;
+      if (px >= f.x && px <= f.x + f.w && py >= f.y && py <= f.y + f.h) {
+        const was = selSeg !== i || selFrame !== k; selSeg = i; selFrame = k;
+        if (was) { renderTimeline(); renderInspector(); renderFrameUI(i); }
+        frameDrag(e, seg, frameMode === 'content' ? 'content' : 'move'); return;
+      }
+    }
+  }
   let changed = false;
   if (selText !== -1) { selText = -1; changed = true; }
   if (tab === 'seg' && selSeg !== segAt(gTime).i) { selSeg = segAt(gTime).i; changed = true; renderTimeline(); }

@@ -22,7 +22,39 @@ function layoutSlot(sl, i, local) {
     const z = seg.freeze ? 1 + 0.024 * local : 1;
     Object.assign(v.style, { display: 'block', left: c.x * s + 'px', top: c.y * s + 'px', width: c.w * s + 'px', height: c.w * src.aspect * s + 'px', transform: `scale(${z})` });
   }
+  // extra frames: canvases that mirror the main video
+  sl.extras = sl.extras || [];
+  const ex = seg.extra || [];
+  while (sl.extras.length > ex.length) sl.extras.pop().root.remove();
+  while (sl.extras.length < ex.length) {
+    const root = el('div', 'frame extra'), cv = el('canvas'), bd = el('div', 'frame-border');
+    root.append(cv, bd); sl.root.insertBefore(root, sl.texts); sl.extras.push({ root, cv, bd });
+  }
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  ex.forEach((x, k) => {
+    const e = sl.extras[k], ff = x.frame;
+    Object.assign(e.root.style, {
+      left: ff.x * s + 'px', top: ff.y * s + 'px', width: ff.w * s + 'px', height: ff.h * s + 'px',
+      borderRadius: (ff.r || 0) * s + 'px', transform: `rotate(${ff.rot || 0}deg)`, background: ff.fill || '#000', filter: dim,
+      boxShadow: ff.shadow ? `0 ${14 * s}px ${48 * s}px rgba(60,20,110,.35)` : 'none'
+    });
+    Object.assign(e.bd.style, { display: ff.bw > 0 ? 'block' : 'none', border: `${(ff.bw || 0) * s}px solid ${ff.bc || '#fff'}`, borderRadius: (ff.r || 0) * s + 'px' });
+    const w = Math.max(1, Math.round(ff.w * s * dpr)), h = Math.max(1, Math.round(ff.h * s * dpr));
+    if (e.cv.width !== w || e.cv.height !== h) { e.cv.width = w; e.cv.height = h; }
+  });
   sl.seg = i;
+}
+function drawExtras(sl, i, local) {
+  const seg = project.segments[i]; if (!seg.extra || !seg.extra.length || !sl.extras) return;
+  const v = sl.vids[seg.src], src = project.sources[seg.src], s = S(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const z = seg.freeze ? 1 + 0.024 * local : 1;
+  seg.extra.forEach((x, k) => {
+    const e = sl.extras[k]; if (!e) return; const g = e.cv.getContext('2d'), c = x.content, k2 = s * dpr;
+    g.fillStyle = x.frame.fill || '#000'; g.fillRect(0, 0, e.cv.width, e.cv.height);
+    if (v.readyState < 2) return;
+    const cw = c.w * z, ch = c.w * src.aspect * z, cx = c.x - (cw - c.w) / 2, cy = c.y - (ch - c.w * src.aspect) / 2;
+    try { g.drawImage(v, cx * k2, cy * k2, cw * k2, ch * k2); } catch (err) {}
+  });
 }
 function syncSlotVideo(sl, i, local, force) {
   const seg = project.segments[i], v = sl.vids[seg.src];
@@ -69,9 +101,10 @@ function applyFrame(force) {
   for (const a of act) {
     const sl = slots[a.i % 2]; used.add(sl.n);
     resetSlotFx(sl);
-    const k = a.i + '|' + JSON.stringify(project.segments[a.i].frame) + JSON.stringify(project.segments[a.i].content) + project.segments[a.i].bg + S();
+    const k = a.i + '|' + JSON.stringify(project.segments[a.i].frame) + JSON.stringify(project.segments[a.i].content) + JSON.stringify(project.segments[a.i].extra || []) + project.segments[a.i].bg + S();
     if (force || sl.key !== k || project.segments[a.i].freeze) { layoutSlot(sl, a.i, a.local); sl.key = k; }
     syncSlotVideo(sl, a.i, a.local, force);
+    drawExtras(sl, a.i, a.local);
     renderTexts(sl, a.i, a.local, act.length === 1);
   }
   for (const sl of slots) if (!used.has(sl.n)) { sl.root.style.display = 'none'; Object.values(sl.vids).forEach(v => { if (!v.paused) v.pause(); }); sl.seg = -1; sl.key = ''; }
@@ -178,7 +211,8 @@ function frameCenter(f) { return { x: f.x + f.w / 2, y: f.y + f.h / 2 }; }
 function renderFrameUI(i) {
   const ui = $('frameUI');
   if (i < 0 || tab !== 'seg' || playing || i !== selSeg) { ui.style.display = 'none'; return; }
-  const f = project.segments[i].frame, s = S();
+  const seg = project.segments[i]; if (selFrame >= frameCount(seg)) selFrame = 0;
+  const f = frameAt(seg, selFrame).f, s = S();
   ui.style.display = 'block';
   Object.assign(ui.style, { left: f.x * s + 'px', top: f.y * s + 'px', width: f.w * s + 'px', height: f.h * s + 'px', transform: `rotate(${f.rot || 0}deg)` });
   ui.classList.toggle('content-mode', frameMode === 'content');
@@ -189,12 +223,17 @@ function initFrameUI() {
   for (const h of handles) { const d = el('div', 'fh fh-' + h); d.dataset.h = h; ui.appendChild(d); }
   ui.addEventListener('pointerdown', e => {
     const seg = project.segments[selSeg]; if (!seg) return;
+    if (!e.target.dataset.h && frameCount(seg) > 1) { // a click inside another frame selects that frame instead
+      const st = $('stage').getBoundingClientRect(), s = S(), px = (e.clientX - st.left) / s, py = (e.clientY - st.top) / s;
+      const hit = k => { const f = frameAt(seg, k).f; return px >= f.x && px <= f.x + f.w && py >= f.y && py <= f.y + f.h; };
+      if (!hit(selFrame)) for (let k = 0; k < frameCount(seg); k++) if (hit(k)) { selFrame = k; renderInspector(); renderFrameUI(selSeg); break; }
+    }
     const h = e.target.dataset.h || (frameMode === 'content' ? 'content' : 'move');
     frameDrag(e, seg, h);
   });
 }
 function frameDrag(e, seg, h) {
-  const s = S(), f = seg.frame, c = seg.content;
+  const s = S(), { f, c } = frameAt(seg, selFrame);
   const o = { f: clone(f), c: clone(c) };
   const th = rad(f.rot || 0), cos = Math.cos(th), sin = Math.sin(th);
   const c0 = frameCenter(o.f);

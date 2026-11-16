@@ -249,57 +249,76 @@ def paste_center(canvas, img, cx, cy):
 # ---------------------------------------------------------------- 1. one clip
 def render_segment(i, s, dur, work):
     src = ORIG[s["src"]]; speed = s.get("speed") or 1
-    f, c = s["frame"], s["content"]
+    frames = [(s["frame"], s["content"])] + [(x["frame"], x["content"]) for x in (s.get("extra") or [])]
     aspect = source_aspect(src)
-    rot = float(f.get("rot") or 0); r = float(f.get("r") or 0); bw = float(f.get("bw") or 0)
     dim = ",eq=brightness=-0.06" if s.get("dim") else ""
     inputs, fc = [], []
-    full = (abs(f["x"]) < .5 and abs(f["y"]) < .5 and abs(f["w"] - W) < .5 and abs(f["h"] - H) < .5 and not rot and not r and not bw
+    f, c = frames[0]
+    full = (len(frames) == 1 and abs(f["x"]) < .5 and abs(f["y"]) < .5 and abs(f["w"] - W) < .5 and abs(f["h"] - H) < .5
+            and not f.get("rot") and not f.get("r") and not f.get("bw")
             and abs(c["x"]) < .5 and abs(c["y"]) < .5 and abs(c["w"] - W) < .5 and abs(aspect - H / W) < 0.01)
-    CW, CH = (W, H) if full else (even(c["w"]), even(c["w"] * aspect))
     if s.get("freeze"):
         frame = os.path.join(work, f"freeze{i}.png")
         run(["ffmpeg", "-v", "error", "-y", "-ss", str(s["in"]), "-i", src, "-frames:v", "1", frame])
         inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", frame]
-        src_chain = (f"[0:v]scale={CW}:{CH}:flags=lanczos,setsar=1,zoompan=z='1+0.0008*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-                     f":d=1:s={CW}x{CH}:fps={FPS}")
+        base = "[0:v]setsar=1"
     else:
         inputs += ["-ss", str(s["in"]), "-t", f"{s['out'] - s['in']:.3f}", "-i", src]
-        src_chain = f"[0:v]setpts=PTS/{speed},scale={CW}:{CH}:flags=lanczos" + (",unsharp=5:5:0.4" if full else "") + f",setsar=1,fps={FPS}"
+        base = f"[0:v]setpts=PTS/{speed},fps={FPS},setsar=1"
+
+    def sized(label, CW, CH, sharpen=False):
+        """scale the source to the content size (+ slow zoom for freeze frames)"""
+        chain = f"{label}scale={CW}:{CH}:flags=lanczos" + (",unsharp=5:5:0.4" if sharpen else "") + ",setsar=1"
+        if s.get("freeze"):
+            chain += f",zoompan=z='1+0.0008*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CW}x{CH}:fps={FPS}"
+        return chain
+
     if full:
-        fc.append(f"{src_chain}{dim}[v0]")
+        fc.append(sized(base + ",", W, H, sharpen=True).replace("[0:v]setsar=1,", "[0:v]") + f"{dim}[v0]")
     else:
-        FW, FH = even(f["w"]), even(f["h"])
-        fcx, fcy = f["x"] + f["w"] / 2, f["y"] + f["h"] / 2
-        # background + soft shadow of the (rotated) frame
+        n = len(frames)
+        fc.append(f"{base},split={n}" + "".join(f"[s{k}]" for k in range(n)) if n > 1 else f"{base}[s0]")
+        # background + soft shadows of every (rotated) frame
         bg = gradient_bg(s.get("bg"))
-        if f.get("shadow"):
+        for f, c in frames:
+            if not f.get("shadow"):
+                continue
+            FW, FH, r, rot = even(f["w"]), even(f["h"]), float(f.get("r") or 0), float(f.get("rot") or 0)
             sh = Image.new("RGBA", (FW + 200, FH + 200), (0, 0, 0, 0))
             ImageDraw.Draw(sh).rounded_rectangle([100, 100, 100 + FW, 100 + FH], r, fill=(60, 20, 110, 90))
             if rot:
                 sh = sh.rotate(-rot, resample=Image.BICUBIC, expand=True)
             sh = sh.filter(ImageFilter.GaussianBlur(24))
-            paste_center(bg, sh, fcx, fcy + 14)
+            paste_center(bg, sh, f["x"] + f["w"] / 2, f["y"] + f["h"] / 2 + 14)
         bpath = os.path.join(work, f"bg{i}.png"); bg.convert("RGB").save(bpath)
         bi = inputs.count("-i"); inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", bpath]
-        ci = inputs.count("-i"); inputs += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"color=c={f.get('fill', '#000000').replace('#', '0x')}:s={FW}x{FH}:r={FPS}"]
-        fc.append(f"{src_chain}[sv]")
-        fc.append(f"[{ci}:v][sv]overlay={int(round(c['x']))}:{int(round(c['y']))}:eof_action=repeat,format=rgba[fr0]")
-        last = "fr0"
-        if r > 0 or rot:
-            mask = Image.new("L", (FW, FH), 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, FW - 1, FH - 1], r, fill=255)
-            mpath = os.path.join(work, f"mask{i}.png"); mask.save(mpath)
-            mi = inputs.count("-i"); inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", mpath]
-            fc.append(f"[{mi}:v]format=gray[m{i}];[{last}][m{i}]alphamerge[fr1]"); last = "fr1"
-        if bw > 0:
-            bord = Image.new("RGBA", (FW, FH), (0, 0, 0, 0))
-            ImageDraw.Draw(bord).rounded_rectangle([bw / 2, bw / 2, FW - 1 - bw / 2, FH - 1 - bw / 2], max(0, r - bw / 2), outline=hex2rgba(f.get("bc", "#ffffff")), width=int(round(bw)))
-            opath = os.path.join(work, f"border{i}.png"); bord.save(opath)
-            oi = inputs.count("-i"); inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", opath]
-            fc.append(f"[{last}][{oi}:v]overlay=0:0:format=auto[fr2]"); last = "fr2"
-        if rot:
-            fc.append(f"[{last}]rotate=a={rot}*PI/180:ow=rotw({rot}*PI/180):oh=roth({rot}*PI/180):c=none[fr3]"); last = "fr3"
-        fc.append(f"[{bi}:v]fps={FPS},setsar=1[b{i}];[b{i}][{last}]overlay=x='{fcx:.2f}-w/2':y='{fcy:.2f}-h/2':shortest=1,format=yuv420p{dim}[v0]")
+        fc.append(f"[{bi}:v]fps={FPS},setsar=1[b{i}_0]")
+        under = f"b{i}_0"
+        for k, (f, c) in enumerate(frames):
+            FW, FH = even(f["w"]), even(f["h"]); CW, CH = even(c["w"]), even(c["w"] * aspect)
+            r, rot, bw = float(f.get("r") or 0), float(f.get("rot") or 0), float(f.get("bw") or 0)
+            fcx, fcy = f["x"] + f["w"] / 2, f["y"] + f["h"] / 2
+            ci = inputs.count("-i"); inputs += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"color=c={f.get('fill', '#000000').replace('#', '0x')}:s={FW}x{FH}:r={FPS}"]
+            fc.append(sized(f"[s{k}]", CW, CH) + f"[sv{k}]")
+            fc.append(f"[{ci}:v][sv{k}]overlay={int(round(c['x']))}:{int(round(c['y']))}:eof_action=repeat,format=rgba[f{k}a]")
+            last = f"f{k}a"
+            if r > 0 or rot:
+                mask = Image.new("L", (FW, FH), 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, FW - 1, FH - 1], r, fill=255)
+                mpath = os.path.join(work, f"mask{i}_{k}.png"); mask.save(mpath)
+                mi = inputs.count("-i"); inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", mpath]
+                fc.append(f"[{mi}:v]format=gray[m{k}];[{last}][m{k}]alphamerge[f{k}b]"); last = f"f{k}b"
+            if bw > 0:
+                bord = Image.new("RGBA", (FW, FH), (0, 0, 0, 0))
+                ImageDraw.Draw(bord).rounded_rectangle([bw / 2, bw / 2, FW - 1 - bw / 2, FH - 1 - bw / 2], max(0, r - bw / 2), outline=hex2rgba(f.get("bc", "#ffffff")), width=int(round(bw)))
+                opath = os.path.join(work, f"border{i}_{k}.png"); bord.save(opath)
+                oi = inputs.count("-i"); inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", opath]
+                fc.append(f"[{last}][{oi}:v]overlay=0:0:format=auto[f{k}c]"); last = f"f{k}c"
+            if rot:
+                fc.append(f"[{last}]rotate=a={rot}*PI/180:ow=rotw({rot}*PI/180):oh=roth({rot}*PI/180):c=none[f{k}d]"); last = f"f{k}d"
+            out = f"b{i}_{k + 1}"
+            fc.append(f"[{under}][{last}]overlay=x='{fcx:.2f}-w/2':y='{fcy:.2f}-h/2':shortest=1[{out}]")
+            under = out
+        fc.append(f"[{under}]format=yuv420p{dim}[v0]")
     n_in = inputs.count("-i"); last = "v0"
     for k, t in enumerate(s.get("texts", [])):
         if not t.get("text", "").strip():

@@ -68,13 +68,47 @@ const FRAME_PRESETS = {
 function applyFramePreset(seg, key) {
   const p = FRAME_PRESETS[key], a = project.sources[seg.src].aspect;
   if (p.zoom) { zoomContent(seg, p.zoom); return; }
-  seg.frame = clone(p.f);
-  seg.content = p.top ? { x: 0, y: 0, w: seg.frame.w } : coverContent(seg.frame, a);
+  const nf = clone(p.f), nc = p.top ? { x: 0, y: 0, w: nf.w } : coverContent(nf, a);
+  if (selFrame > 0 && seg.extra && seg.extra[selFrame - 1]) { seg.extra[selFrame - 1].frame = nf; seg.extra[selFrame - 1].content = nc; }
+  else { seg.frame = nf; seg.content = nc; seg.extra = []; selFrame = 0; }
   if (p.bg) seg.bg = p.bg;
 }
-function zoomContent(seg, k) { // scale the picture inside the frame around the frame centre
-  const f = seg.frame, c = seg.content, cx = f.w / 2, cy = f.h / 2;
+function zoomContent(seg, k) { // scale the picture inside the active frame around its centre
+  const { f, c } = frameAt(seg, selFrame), cx = f.w / 2, cy = f.h / 2;
   c.x = r2(cx - (cx - c.x) * k); c.y = r2(cy - (cy - c.y) * k); c.w = r2(c.w * k);
+}
+/* Find the biggest empty (flat-colour) band inside frame 1 and split the frame into two around it. */
+function autoSplit(seg) {
+  const v = slots[selSeg % 2].vids[seg.src], src = project.sources[seg.src];
+  if (!v || v.readyState < 2) { toast('画面还在载入，等一下再按'); return false; }
+  const f = seg.frame, c = seg.content, q = 4;                    // q = canvas units per sample
+  const cw = Math.round(c.w / q), ch = Math.round(c.w * src.aspect / q);
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const g = cv.getContext('2d'); g.drawImage(v, 0, 0, cw, ch);
+  let data; try { data = g.getImageData(0, 0, cw, ch).data; } catch (e) { toast('读不到画面'); return false; }
+  const y0 = clamp(Math.round(-c.y / q), 0, ch), y1 = clamp(Math.round((f.h - c.y) / q), 0, ch);
+  const x0 = clamp(Math.round(-c.x / q) + 2, 0, cw), x1 = clamp(Math.round((f.w - c.x) / q) - 2, 0, cw);
+  const flat = []; // per row: is the row a single flat colour?
+  for (let y = y0; y < y1; y++) {
+    let sum = 0, sq = 0, n = 0;
+    for (let x = x0; x < x1; x += 2) { const p = (y * cw + x) * 4, l = 0.3 * data[p] + 0.59 * data[p + 1] + 0.11 * data[p + 2]; sum += l; sq += l * l; n++; }
+    const m = sum / n; flat.push(Math.sqrt(Math.max(0, sq / n - m * m)) < 3);
+  }
+  let best = [0, 0], cur = -1; // longest run of flat rows, not touching the edges
+  for (let k = 0; k <= flat.length; k++) {
+    if (k < flat.length && flat[k]) { if (cur < 0) cur = k; }
+    else if (cur >= 0) { if (k - cur > best[1] - best[0] && cur > 0 && k < flat.length) best = [cur, k]; cur = -1; }
+  }
+  if ((best[1] - best[0]) * q < f.h * 0.15) { toast('找不到够大的留白'); return false; }
+  const margin = 28, gap = 56;
+  const topEnd = (y0 + best[0]) * q + c.y, botStart = (y0 + best[1]) * q + c.y; // in frame coords
+  const A = clone(f); A.h = r2(topEnd + margin); A.rot = 0;
+  const B = clone(f); B.rot = 0; B.h = r2(f.h - botStart + margin);
+  const total = A.h + gap + B.h, top = f.y + (f.h - total) / 2;
+  A.y = r2(top); B.y = r2(top + A.h + gap);
+  const cB = { x: c.x, y: r2(c.y - (botStart - margin)), w: c.w };
+  seg.frame = A; seg.extra = [{ frame: B, content: cB }]; selFrame = 0;
+  return true;
 }
 function segPanel(box) {
   const seg = project.segments[selSeg]; const src = project.sources[seg.src];
@@ -116,6 +150,14 @@ function segPanel(box) {
   }
 
   box.appendChild(el('h3', null, '🖼 画面框'));
+  const chips = el('div', 'presets'); chips.style.marginBottom = '8px';
+  for (let k = 0; k < frameCount(seg); k++) chips.appendChild(button('框 ' + (k + 1), () => { selFrame = k; renderInspector(); applyFrame(false); }, 'preset' + (selFrame === k ? ' on' : '')));
+  chips.appendChild(button('＋ 加一个框', () => { commit(); const { f, c } = frameAt(seg, selFrame); const nf = clone(f); nf.x = r2(nf.x + 60); nf.y = r2(nf.y + 60); seg.extra = seg.extra || []; seg.extra.push({ frame: nf, content: clone(c) }); selFrame = frameCount(seg) - 1; refresh(true); }, 'preset'));
+  if (frameCount(seg) > 1) chips.appendChild(button('删除这个框', () => { commit(); if (selFrame === 0) { const x = seg.extra.shift(); seg.frame = x.frame; seg.content = x.content; } else seg.extra.splice(selFrame - 1, 1); selFrame = 0; refresh(true); }, 'preset'));
+  box.appendChild(chips);
+  const sp = el('div', 'inline'); sp.style.marginBottom = '8px';
+  sp.appendChild(button('✂ 去掉中间留白（自动分成两框）', () => { commit(); if (autoSplit(seg)) { refresh(true); toast('已分成两个框，可以再拖动微调'); } else history.pop(); }, 'btn small primary'));
+  box.appendChild(sp);
   const pr = el('div', 'presets');
   for (const [k, p] of Object.entries(FRAME_PRESETS)) pr.appendChild(button(p.label, () => { commit(); applyFramePreset(seg, k); refresh(true); }, 'preset'));
   box.appendChild(pr);
@@ -124,7 +166,7 @@ function segPanel(box) {
   for (const [k, label] of [['frame', '移动框'], ['content', '移动框里的画面']]) mode.appendChild(button(label, () => { frameMode = k; renderInspector(); applyFrame(false); }, 'btn small' + (frameMode === k ? ' primary' : '')));
   box.appendChild(mode);
   box.appendChild(el('div', 'hint', '拖四个角 = 整个放大缩小；拖四条边 = 裁切框的长宽；上面的圆点 = 转角度。'));
-  const f = seg.frame, c = seg.content;
+  const { f, c } = frameAt(seg, selFrame);
   const more = el('details', 'more'); more.appendChild(el('summary', null, '更多调整（数字微调、圆角、边框、背景）'));
   if (frameMore) more.open = true;
   more.addEventListener('toggle', () => { frameMore = more.open; });
@@ -140,7 +182,7 @@ function segPanel(box) {
   more.appendChild(checks('效果', [['阴影', !!f.shadow, v => { f.shadow = v; }]]));
   more.appendChild(selectRow('画布背景', seg.bg || 'black', [['black', '黑色'], ['lav', '薰衣草紫'], ['pink', '粉红渐层'], ['cream', '奶油白'], ['white', '白色']], v => { seg.bg = v; }));
   const ap = el('div', 'inline');
-  ap.appendChild(button('套用这个画面框到所有片段', () => { commit(); project.segments.forEach(o => { if (o === seg) return; o.frame = clone(seg.frame); o.content = coverContent(o.frame, project.sources[o.src].aspect); o.bg = seg.bg; }); refresh(true); toast('已套用到所有片段'); }));
+  ap.appendChild(button('套用这个画面框到所有片段', () => { commit(); project.segments.forEach(o => { if (o === seg) return; o.frame = clone(seg.frame); o.content = coverContent(o.frame, project.sources[o.src].aspect); o.extra = []; o.bg = seg.bg; }); refresh(true); toast('已套用到所有片段'); }));
   more.appendChild(ap);
   box.appendChild(more);
 

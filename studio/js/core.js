@@ -62,7 +62,11 @@ try {
   if (s) { const o = JSON.parse(s); if (o && o.p && o.p.segments) project = migrate(o.p); if (o && o.meta) meta = o.meta; }
 } catch (e) {}
 let history = [], selSeg = 0, selText = -1, selAudio = -1, tab = 'seg';
-let playing = false, gTime = 0, lastTick = 0, muted = true, interacting = false, frameMode = 'frame', frameMore = false;
+let playing = false, gTime = 0, lastTick = 0, muted = true, interacting = false, frameMode = 'frame', frameMore = false, selFrame = 0;
+/* a clip can show its picture in several frames ("windows"): seg.frame/seg.content is frame 1,
+ * seg.extra[k] = {frame, content} are the others (same source, same time) */
+const frameCount = seg => 1 + (seg.extra ? seg.extra.length : 0);
+function frameAt(seg, k) { const x = k > 0 && seg.extra && seg.extra[k - 1]; return x ? { f: x.frame, c: x.content } : { f: seg.frame, c: seg.content }; }
 
 /* ---------- timing (mirrored in render.py: seg_duration / trans_duration / starts) ---------- */
 const segDur = s => s.freeze ? (s.out - s.in) : (s.out - s.in) / (s.speed || 1);
