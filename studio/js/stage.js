@@ -81,7 +81,7 @@ function applyFrame(force) {
   renderOverlay(gTime);
   renderFrameUI(act.length === 1 ? act[0].i : -1);
   $('timeLbl').textContent = `${gTime.toFixed(1)} / ${T.toFixed(1)}s`;
-  const ph = $('playhead'); if (ph) ph.style.left = gTime * pps() + 'px';
+  updatePlayhead();
 }
 
 /* ---------- segment texts (inside the slot, so they move with transitions) ---------- */

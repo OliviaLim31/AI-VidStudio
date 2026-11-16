@@ -2,6 +2,7 @@
 'use strict';
 /* ---------- boot ---------- */
 initFrameUI();
+initTimelineControls();
 project.audio.forEach(c => attachAudio(c));
 renderTimeline(); renderInspector(); markDirty();
 (async () => {
