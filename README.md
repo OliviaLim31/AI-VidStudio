@@ -26,7 +26,10 @@ The studio is for fast "tutorial-style" social videos: AI-generated clips, real 
 
 ```
 studio/
-  template.html        the studio page (project + fonts are injected at build time)
+  index.html           the studio page shell
+  css/studio.css       styles
+  js/                  core · media · stage · timeline · inspector · actions · storage · main
+                       (js/data.js with the fonts table and the project is generated at build time)
   fonts/               bundled fonts + fonts.json + licences
 renderer/
   render.py            project JSON -> MP4

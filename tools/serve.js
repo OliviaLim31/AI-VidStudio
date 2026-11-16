@@ -1,6 +1,6 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const root = process.argv[2], port = +(process.argv[3] || 8765);
-const types = { '.mp4': 'video/mp4', '.html': 'text/html; charset=utf-8', '.otf': 'font/otf', '.ttf': 'font/ttf', '.json': 'application/json' };
+const types = { '.mp4': 'video/mp4', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.html': 'text/html; charset=utf-8', '.otf': 'font/otf', '.ttf': 'font/ttf', '.json': 'application/json' };
 http.createServer((q, r) => {
   let u = decodeURIComponent(q.url.split('?')[0]); if (u === '/') u = '/index.html';
   const f = path.join(root, u);

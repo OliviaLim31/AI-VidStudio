@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Olivia 剪辑工作室</title>
+<style id="fontfaces"></style>
+<link rel="stylesheet" href="css/studio.css">
+</head>
+<body>
+<header>
+  <h1>🎬 Olivia 剪辑工作室</h1>
+  <span class="lenpill" id="lenPill">0s</span>
+  <span class="spacer"></span>
+  <button class="btn" id="undoBtn">↶ 撤销</button>
+  <button class="btn" id="resetBtn">还原</button>
+  <button class="btn" id="saveBtn">💾 保存</button>
+  <button class="btn" id="savesBtn">📂 存档</button>
+  <button class="btn" id="dlBtn">⬇ 下载</button>
+  <button class="btn primary" id="exportBtn">✨ 发给 Claude 渲染</button>
+</header>
+
+<main>
+  <section class="panel stage-wrap">
+    <div class="stage" id="stage">
+      <div class="layer full" id="fullLayer"></div>
+      <div class="layer phonebg" id="phoneLayer" style="display:none"><div class="phone" id="phone"></div></div>
+      <div class="layer" id="safeLayer">
+        <div class="safe" style="left:0;right:0;top:0;height:11.5%"></div>
+        <div class="safe" style="left:0;right:0;bottom:0;height:21%"></div>
+        <div class="safe" style="right:0;width:13%;top:45%;height:34%"></div>
+      </div>
+      <div class="layer" id="textLayer"></div>
+      <div class="guide" id="guide"></div>
+      <div class="hguide" id="hguide"></div>
+    </div>
+    <div class="transport">
+      <button class="btn" id="restartBtn">⏮</button>
+      <button class="btn primary" id="playBtn" style="min-width:84px">▶ 播放</button>
+      <span class="time" id="timeLbl">0.0 / 0.0s</span>
+      <button class="btn" id="soundBtn">🔇 静音</button>
+    </div>
+    <div class="inline" style="justify-content:center">
+      <label class="chk"><input type="checkbox" id="safeChk"> 显示 IG 遮挡区</label>
+    </div>
+    <div class="hint" style="text-align:center">点文字选中 → 拖动可移到任何位置；黄色圆点：转角度 / 放大缩小<br>拖动文字以外的地方 = 移动影片画面</div>
+  </section>
+
+  <section class="panel" id="inspectorPanel">
+    <div class="tabs">
+      <button class="tab" data-tab="seg">🎞 片段</button>
+      <button class="tab" data-tab="text">🔤 文字</button>
+      <button class="tab" data-tab="audio">🎵 声音</button>
+    </div>
+    <div id="inspector"></div>
+  </section>
+
+  <section class="panel timeline-wrap">
+    <div class="inline" style="justify-content:space-between;margin-bottom:6px">
+      <h2>时间轴</h2>
+      <div class="inline"><span class="hint">缩放</span><input type="range" id="zoom" min="1" max="8" step="0.5" value="1" style="width:110px;flex:none"></div>
+    </div>
+    <div class="tl-scroll" id="tlScroll"><div class="tl" id="tl"></div></div>
+    <div class="hint" style="margin-top:4px">拖片段两边的<b>紫色把手</b>改长度；声音块可以左右拖。</div>
+    <div class="tl-actions">
+      <button class="btn small" id="leftBtn">◀ 往前移</button>
+      <button class="btn small" id="rightBtn">往后移 ▶</button>
+      <button class="btn small" id="splitBtn">✂ 在播放头切开</button>
+      <button class="btn small" id="dupBtn">⧉ 复制</button>
+      <button class="btn small" id="delBtn">🗑 删除</button>
+      <button class="btn small" id="addBtn">＋ 新片段</button>
+      <span class="spacer"></span>
+      <label class="chk"><input type="checkbox" id="badgeOn"> 角标</label>
+      <input type="text" id="badgeText" style="width:160px">
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h2>发给 Claude 渲染</h2>
+    <p id="modalMsg"></p>
+    <div id="fileList"></div>
+    <details id="copyBox"><summary class="hint">备用：手动复制设定</summary>
+      <textarea id="exportText" readonly></textarea>
+      <button class="btn small" id="copyAgain" style="margin-top:6px">复制</button>
+    </details>
+    <div class="inline" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" id="closeModal">好</button>
+    </div>
+  </div>
+</div>
+<div class="modal" id="savesModal">
+  <div class="box">
+    <h2>📂 存档</h2>
+    <p class="hint">点"打开"就会回到那个版本（现在的内容可以用"撤销"找回）。</p>
+    <div class="savelist" id="saveList"></div>
+    <div class="inline" style="justify-content:flex-end"><button class="btn primary" data-close="savesModal">关闭</button></div>
+  </div>
+</div>
+<div class="modal" id="dlModal">
+  <div class="box">
+    <h2>⬇ 下载</h2>
+    <div class="dlrow">
+      <b>🎬 成品影片（MP4）</b>
+      <p class="hint" id="renderInfo">检查中…</p>
+      <button class="btn primary" id="dlVideo" disabled>下载成品</button>
+    </div>
+    <div class="dlrow">
+      <b>🗂 项目备份（JSON）</b>
+      <p class="hint">现在工作室里的全部设定，可以留着备份，或者拿到别的账号用。</p>
+      <button class="btn" id="dlProject">下载备份</button>
+    </div>
+    <p class="hint" id="dlNote"></p>
+    <div class="inline" style="justify-content:flex-end"><button class="btn primary" data-close="dlModal">关闭</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="js/data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/media.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/inspector.js"></script>
+<script src="js/actions.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
+
