@@ -1,0 +1,402 @@
+{
+ "name": "Keyboard tutorial",
+ "version": 2,
+ "badge": {
+  "on": true,
+  "text": "Made with Picsart"
+ },
+ "sources": {
+  "result": {
+   "label": "AI result (Picsart)",
+   "file": "media/result.mp4",
+   "dur": 10.03
+  },
+  "real": {
+   "label": "Real clip",
+   "file": "media/real.mp4",
+   "dur": 2.46
+  },
+  "screen1": {
+   "label": "Screen rec 1 (open app)",
+   "file": "media/screen1.mp4",
+   "dur": 7.44,
+   "screen": true
+  },
+  "screen2": {
+   "label": "Screen rec 2 (model + prompt)",
+   "file": "media/screen2.mp4",
+   "dur": 12.4,
+   "screen": true
+  },
+  "screen3": {
+   "label": "Screen rec 3 (photo)",
+   "file": "media/screen3.mp4",
+   "dur": 7.09,
+   "screen": true
+  },
+  "screen4": {
+   "label": "Screen rec 4 (generate)",
+   "file": "media/screen4.mp4",
+   "dur": 3.49,
+   "screen": true
+  }
+ },
+ "segments": [
+  {
+   "id": "s1",
+   "name": "Hook",
+   "src": "result",
+   "layout": "full",
+   "in": 4.3,
+   "out": 6.3,
+   "speed": 1,
+   "freeze": false,
+   "sound": true,
+   "sfx": "none",
+   "texts": [
+    {
+     "text": "My keyboard\nrefused to fall",
+     "size": 92,
+     "y": 330,
+     "start": 0,
+     "end": 99,
+     "font": "display-black",
+     "color": "#5b2ba8",
+     "bg": "pill",
+     "bgColor": "#ffffff",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s2",
+   "name": "Real me",
+   "src": "real",
+   "layout": "full",
+   "in": 0,
+   "out": 2.4,
+   "speed": 1,
+   "freeze": false,
+   "sound": true,
+   "sfx": "whoosh",
+   "texts": [
+    {
+     "text": "real me:",
+     "size": 80,
+     "y": 380,
+     "start": 0,
+     "end": 99,
+     "font": "display-black",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s3",
+   "name": "Step 1",
+   "src": "screen1",
+   "layout": "phone",
+   "cropY": 360,
+   "in": 0.6,
+   "out": 1.85,
+   "speed": 1,
+   "freeze": false,
+   "sound": false,
+   "sfx": "whoosh",
+   "texts": [
+    {
+     "text": "1  Open Picsart",
+     "size": 58,
+     "y": 228,
+     "start": 0,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s4",
+   "name": "Step 2",
+   "src": "screen2",
+   "layout": "phone",
+   "cropY": 60,
+   "in": 0,
+   "out": 0.9,
+   "speed": 1,
+   "freeze": false,
+   "sound": false,
+   "sfx": "pop",
+   "texts": [
+    {
+     "text": "2  AI Video Generator",
+     "size": 58,
+     "y": 228,
+     "start": 0,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s5",
+   "name": "Step 3",
+   "src": "screen2",
+   "layout": "phone",
+   "cropY": 767,
+   "in": 1,
+   "out": 7.5,
+   "speed": 3,
+   "freeze": false,
+   "sound": false,
+   "sfx": "pop",
+   "texts": [
+    {
+     "text": "3  Pick MiniMax H3 Max",
+     "size": 58,
+     "y": 228,
+     "start": 0,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s6",
+   "name": "Step 4",
+   "src": "screen3",
+   "layout": "phone",
+   "cropY": 60,
+   "in": 1,
+   "out": 3.9,
+   "speed": 1.5,
+   "freeze": false,
+   "sound": false,
+   "sfx": "pop",
+   "texts": [
+    {
+     "text": "4  1 photo + 1 prompt",
+     "size": 58,
+     "y": 228,
+     "start": 0,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s7",
+   "name": "Step 5",
+   "src": "screen4",
+   "layout": "phone",
+   "cropY": 767,
+   "in": 0,
+   "out": 2.8,
+   "speed": 1.4,
+   "freeze": false,
+   "sound": false,
+   "sfx": "pop",
+   "texts": [
+    {
+     "text": "5  Hit Generate",
+     "size": 58,
+     "y": 228,
+     "start": 0,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s8",
+   "name": "Result",
+   "src": "result",
+   "layout": "full",
+   "in": 4,
+   "out": 10,
+   "speed": 1,
+   "freeze": false,
+   "sound": true,
+   "sfx": "whoosh",
+   "texts": [
+    {
+     "text": "with Picsart:",
+     "size": 80,
+     "y": 380,
+     "start": 0,
+     "end": 2.5,
+     "font": "display-black",
+     "color": "#5b2ba8",
+     "bg": "pill",
+     "bgColor": "#ffffff",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ],
+   "dim": false
+  },
+  {
+   "id": "s9",
+   "name": "CTA",
+   "src": "result",
+   "layout": "full",
+   "in": 9.95,
+   "out": 12.55,
+   "speed": 1,
+   "freeze": true,
+   "dim": true,
+   "sound": false,
+   "sfx": "whoosh",
+   "texts": [
+    {
+     "text": "Comment KEYBOARD",
+     "size": 84,
+     "y": 560,
+     "start": 0,
+     "end": 99,
+     "font": "display-black",
+     "color": "#ffffff",
+     "bg": "pill",
+     "bgColor": "#5b2ba8",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    },
+    {
+     "text": "and I'll send you the prompt",
+     "size": 50,
+     "y": 720,
+     "start": 0.3,
+     "end": 99,
+     "font": "inter-xb",
+     "color": "#5b2ba8",
+     "bg": "pill",
+     "bgColor": "#ffffff",
+     "stroke": 0,
+     "strokeColor": "#000000",
+     "shadow": true,
+     "x": 540,
+     "rot": 0
+    }
+   ]
+  }
+ ],
+ "mix": {
+  "videoVolume": 1
+ },
+ "audio": [],
+ "styles": [
+  {
+   "name": "白底紫字",
+   "font": "display-black",
+   "color": "#5b2ba8",
+   "bg": "pill",
+   "bgColor": "#ffffff",
+   "stroke": 0,
+   "strokeColor": "#000000",
+   "shadow": true
+  },
+  {
+   "name": "紫底白字",
+   "font": "display-black",
+   "color": "#ffffff",
+   "bg": "pill",
+   "bgColor": "#5b2ba8",
+   "stroke": 0,
+   "strokeColor": "#000000",
+   "shadow": true
+  },
+  {
+   "name": "白字黑描边",
+   "font": "display-black",
+   "color": "#ffffff",
+   "bg": "none",
+   "bgColor": "#000000",
+   "stroke": 7,
+   "strokeColor": "#1a1026",
+   "shadow": true
+  },
+  {
+   "name": "Y2K 粉",
+   "font": "adventor-bi",
+   "color": "#ffffff",
+   "bg": "pill",
+   "bgColor": "#ff7eb6",
+   "stroke": 0,
+   "strokeColor": "#000000",
+   "shadow": true
+  },
+  {
+   "name": "柔紫衬线",
+   "font": "lora-i",
+   "color": "#5b2ba8",
+   "bg": "box",
+   "bgColor": "#f3ecff",
+   "stroke": 0,
+   "strokeColor": "#000000",
+   "shadow": true
+  }
+ ]
+}
