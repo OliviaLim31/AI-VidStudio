@@ -1,98 +1,125 @@
-/* AI-VidStudio · timeline.js */
+/* AI-VidStudio · timeline.js — lanes: clips (with transitions), captions, stickers, voice, music */
 'use strict';
-/* ---------- timeline ---------- */
 let zoom = 1, dragPPS = 0;
-function tlLen() { return Math.max(total(), ...project.audio.map(c => c.start + clipDur(c)), 1); }
+function tlLen() {
+  return Math.max(total(), ...project.audio.map(c => c.start + clipDur(c)), ...project.captions.map(c => c.end), ...project.stickers.map(s => s.end), 1);
+}
 function pps() { if (dragPPS) return dragPPS; const w = $('tlScroll').clientWidth - 4; return (w / tlLen()) * zoom; }
+const TRANS_ICON = { none: '＋', fade: '◐', slideleft: '⇠', slideup: '⇡', wipe: '▌', smooth: '▒', circle: '◯', zoom: '⊕', flash: '✦', blur: '◌', liquid: '💗', star: '⭐' };
+
+function laneBlock(cls, left, width, label, sel, onDown, onTrim) {
+  const b = el('div', 'blk ' + cls + (sel ? ' sel' : ''));
+  Object.assign(b.style, { left: left + 'px', width: Math.max(width - 2, 8) + 'px' });
+  b.innerHTML = `<span class="n"></span><div class="trim l"></div><div class="trim r"></div>`;
+  b.querySelector('.n').textContent = label;
+  b.addEventListener('pointerdown', e => { if (!e.target.classList.contains('trim')) onDown(e); });
+  b.querySelector('.trim.l').addEventListener('pointerdown', e => onTrim(e, 'l'));
+  b.querySelector('.trim.r').addEventListener('pointerdown', e => onTrim(e, 'r'));
+  return b;
+}
 function renderTimeline() {
-  const T = total(), P = pps(), tl = $('tl');
+  const T = total(), P = pps(), tl = $('tl'), st = starts();
   tl.style.width = Math.max(tlLen() * P, $('tlScroll').clientWidth - 2) + 'px';
   tl.innerHTML = '';
-  const ruler = document.createElement('div'); ruler.className = 'ruler';
+  const ruler = el('div', 'ruler');
   const step = P > 60 ? 1 : P > 25 ? 2 : 5;
-  for (let s = 0; s <= tlLen(); s += step) { const k = document.createElement('div'); k.className = 'tick'; k.style.left = s * P + 'px'; k.textContent = s + 's'; ruler.appendChild(k); }
+  for (let s = 0; s <= tlLen(); s += step) { const k = el('div', 'tick'); k.style.left = s * P + 'px'; k.textContent = s + 's'; ruler.appendChild(k); }
   ruler.addEventListener('pointerdown', e => { const r = tl.getBoundingClientRect(); seek((e.clientX - r.left) / P); });
   tl.appendChild(ruler);
-  // video lane
-  const lane = document.createElement('div'); lane.className = 'lane';
-  let acc = 0;
+
+  // clips
+  const lane = el('div', 'lane');
   project.segments.forEach((s, i) => {
     const d = segDur(s);
-    const b = document.createElement('div');
-    b.className = 'blk ' + (s.freeze ? 'freeze' : s.layout) + (i === selSeg ? ' sel' : '');
-    Object.assign(b.style, { left: acc * P + 'px', width: Math.max(d * P - 2, 6) + 'px' });
+    const b = el('div', 'blk ' + (s.freeze ? 'freeze' : (s.frame && s.frame.w < W - 1 ? 'phone' : 'full')) + (i === selSeg ? ' sel' : ''));
+    Object.assign(b.style, { left: st[i] * P + 'px', width: Math.max(d * P - 2, 6) + 'px', zIndex: i });
     b.innerHTML = `<span class="n"></span><span class="d">${d.toFixed(1)}s${s.speed && s.speed !== 1 && !s.freeze ? ' · ' + s.speed + 'x' : ''}</span><div class="trim l"></div><div class="trim r"></div>`;
     b.querySelector('.n').textContent = s.name;
     b.addEventListener('pointerdown', e => {
       if (e.target.classList.contains('trim')) return;
       const r = tl.getBoundingClientRect();
-      selSeg = i; selText = -1; if (tab === 'audio') tab = 'seg';
+      selSeg = i; selText = -1; if (tab !== 'seg' && tab !== 'text') tab = 'seg';
       renderTimeline(); renderInspector(); seek((e.clientX - r.left) / P);
     });
     b.querySelector('.trim.l').addEventListener('pointerdown', e => trimSeg(e, i, 'l'));
     b.querySelector('.trim.r').addEventListener('pointerdown', e => trimSeg(e, i, 'r'));
-    lane.appendChild(b); acc += d;
+    lane.appendChild(b);
+    if (i > 0) { // transition marker at the cut
+      const tr = s.trans || { type: 'none' };
+      const m = el('button', 'trans-mk' + (tr.type !== 'none' ? ' on' : ''), TRANS_ICON[tr.type] || '＋');
+      m.title = '转场：' + (TRANSITIONS.find(x => x[0] === tr.type) || ['', '无'])[1];
+      m.style.left = (st[i] + transDur(i) / 2) * P + 'px';
+      m.addEventListener('pointerdown', e => { e.stopPropagation(); selSeg = i; tab = 'seg'; renderTimeline(); renderInspector(); const sec = $('transSection'); sec && sec.scrollIntoView({ block: 'nearest' }); seek(st[i] + 0.01); });
+      lane.appendChild(m);
+    }
   });
   tl.appendChild(lane);
+
+  // captions
+  const cl = el('div', 'lane small');
+  if (!project.captions.length) cl.innerHTML = '<div class="lane-empty">💬 字幕：在"字幕"分页加</div>';
+  project.captions.forEach((c, j) => cl.appendChild(laneBlock('cap', c.start * P, (c.end - c.start) * P, '💬 ' + c.text.replace(/\*/g, ''), tab === 'cap' && j === selCap,
+    e => moveItem(e, c, 'move', () => { tab = 'cap'; selCap = j; }), (e, side) => moveItem(e, c, side, () => { tab = 'cap'; selCap = j; }))));
+  tl.appendChild(cl);
+  // stickers
+  const sk = el('div', 'lane small');
+  if (!project.stickers.length) sk.innerHTML = '<div class="lane-empty">✨ 贴纸：在"贴纸"分页加</div>';
+  project.stickers.forEach((s, j) => sk.appendChild(laneBlock('stk', s.start * P, (s.end - s.start) * P, '✨ ' + (STICKERS[s.type] ? STICKERS[s.type].label : s.type) + (s.text ? ' · ' + s.text : ''), tab === 'stk' && j === selStk,
+    e => moveItem(e, s, 'move', () => { tab = 'stk'; selStk = j; }), (e, side) => moveItem(e, s, side, () => { tab = 'stk'; selStk = j; }))));
+  tl.appendChild(sk);
+
   // audio lanes: voice + music
   for (const [kind, label] of [['voice', '🎙 人声'], ['music', '🎵 音乐']]) {
-    const al = document.createElement('div'); al.className = 'lane audio';
+    const al = el('div', 'lane small audio');
     if (!project.audio.some(c => c.kind === kind)) al.innerHTML = `<div class="lane-empty">${label}：在"声音"分页上传</div>`;
     project.audio.forEach((c, j) => {
       if (c.kind !== kind) return;
-      const b = document.createElement('div');
-      b.className = 'blk ' + (hasFile(c) ? c.kind : 'missing') + (j === selAudio && tab === 'audio' ? ' sel' : '');
-      Object.assign(b.style, { left: c.start * P + 'px', width: Math.max(clipDur(c) * P - 2, 8) + 'px', opacity: c.mute ? .45 : 1 });
-      b.innerHTML = `<span class="n"></span><div class="trim l"></div><div class="trim r"></div>`;
-      b.querySelector('.n').textContent = (c.kind === 'voice' ? '🎙 ' : '🎵 ') + c.name;
-      b.addEventListener('pointerdown', e => { if (!e.target.classList.contains('trim')) moveClip(e, j, 'move'); });
-      b.querySelector('.trim.l').addEventListener('pointerdown', e => moveClip(e, j, 'l'));
-      b.querySelector('.trim.r').addEventListener('pointerdown', e => moveClip(e, j, 'r'));
+      const b = laneBlock(hasFile(c) ? c.kind : 'missing', c.start * P, clipDur(c) * P, (c.kind === 'voice' ? '🎙 ' : '🎵 ') + c.name, j === selAudio && tab === 'audio',
+        e => moveClip(e, j, 'move'), (e, side) => moveClip(e, j, side));
+      b.style.opacity = c.mute ? .45 : 1;
       al.appendChild(b);
     });
     tl.appendChild(al);
   }
-  const ph = document.createElement('div'); ph.className = 'playhead'; ph.id = 'playhead'; ph.style.left = gTime * P + 'px'; tl.appendChild(ph);
-  // header + buttons
+  const ph = el('div', 'playhead'); ph.id = 'playhead'; ph.style.left = gTime * P + 'px'; tl.appendChild(ph);
   const lp = $('lenPill'); lp.textContent = `${T.toFixed(1)} 秒` + (T >= 20 && T <= 30 ? ' ✓' : ' · 建议 20–30 秒'); lp.classList.toggle('warn', !(T >= 20 && T <= 30));
   $('leftBtn').disabled = selSeg <= 0; $('rightBtn').disabled = selSeg >= project.segments.length - 1;
   $('delBtn').disabled = project.segments.length <= 1; $('undoBtn').disabled = !history.length;
   $('badgeOn').checked = project.badge.on; if (document.activeElement !== $('badgeText')) $('badgeText').value = project.badge.text;
 }
 function trimSeg(e, i, side) {
-  e.preventDefault(); e.stopPropagation();
   const s = project.segments[i], src = project.sources[s.src];
-  dragPPS = pps(); const P = dragPPS; const x0 = e.clientX; const o = { in: s.in, out: s.out };
-  let moved = false; interacting = true; selSeg = i;
-  const tgt = window;
-  const move = ev => {
-    const dt = (ev.clientX - x0) / P; if (!moved && Math.abs(dt) * P < 2) return;
-    if (!moved) { moved = true; commit(); }
-    const sp = s.freeze ? 1 : (s.speed || 1);
-    if (s.freeze) { s.out = s.in + clamp((o.out - o.in) + (side === 'r' ? dt : -dt), 0.3, 10); }
+  dragPPS = pps(); const P = dragPPS; const o = { in: s.in, out: s.out }; selSeg = i;
+  dragGesture(e, dx => {
+    const dt = dx / P, sp = s.freeze ? 1 : (s.speed || 1);
+    if (s.freeze) s.out = s.in + clamp((o.out - o.in) + (side === 'r' ? dt : -dt), 0.3, 10);
     else if (side === 'l') s.in = r2(clamp(o.in + dt * sp, 0, s.out - 0.1));
     else s.out = r2(clamp(o.out + dt * sp, s.in + 0.1, src.dur));
     renderTimeline();
     gTime = segStart(i) + (side === 'l' ? 0 : segDur(s) - 0.01); interacting = false; applyFrame(true); interacting = true;
-  };
-  const up = () => { interacting = false; dragPPS = 0; tgt.removeEventListener('pointermove', move); tgt.removeEventListener('pointerup', up); tgt.removeEventListener('pointercancel', up); refresh(true); };
-  tgt.addEventListener('pointermove', move); tgt.addEventListener('pointerup', up); tgt.addEventListener('pointercancel', up);
+  }, () => { dragPPS = 0; refresh(true); });
+}
+function moveItem(e, it, mode, select) { // captions & stickers: start/end on the timeline
+  select(); dragPPS = pps(); const P = dragPPS; const o = { start: it.start, end: it.end };
+  renderInspector();
+  dragGesture(e, dx => {
+    const dt = dx / P;
+    if (mode === 'move') { const d = o.end - o.start; it.start = r2(Math.max(0, o.start + dt)); it.end = r2(it.start + d); }
+    else if (mode === 'l') it.start = r2(clamp(o.start + dt, 0, o.end - 0.2));
+    else it.end = r2(Math.max(o.start + 0.2, o.end + dt));
+    if (it.chunks) buildCaption(it);
+    renderTimeline();
+  }, moved => { dragPPS = 0; refresh(true); if (!moved) { const r = $('tl').getBoundingClientRect(); seek((e.clientX - r.left) / P); } });
 }
 function moveClip(e, j, mode) {
-  e.preventDefault(); e.stopPropagation();
-  const c = project.audio[j]; dragPPS = pps(); const P = dragPPS; const x0 = e.clientX;
+  const c = project.audio[j]; dragPPS = pps(); const P = dragPPS;
   const o = { start: c.start, in: c.in, out: c.out };
-  let moved = false; interacting = true;
   if (selAudio !== j || tab !== 'audio') { selAudio = j; tab = 'audio'; renderInspector(); }
-  const tgt = window;
-  const move = ev => {
-    const dt = (ev.clientX - x0) / P; if (!moved && Math.abs(dt) * P < 3) return;
-    if (!moved) { moved = true; commit(); }
+  dragGesture(e, dx => {
+    const dt = dx / P;
     if (mode === 'move') c.start = r2(Math.max(0, o.start + dt));
     else if (mode === 'l') { const d = clamp(dt, -o.in, o.out - o.in - 0.1); c.in = r2(o.in + d); c.start = r2(Math.max(0, o.start + d)); }
     else c.out = r2(clamp(o.out + dt, c.in + 0.1, c.fileDur || 9999));
     renderTimeline();
-  };
-  const up = () => { interacting = false; dragPPS = 0; tgt.removeEventListener('pointermove', move); tgt.removeEventListener('pointerup', up); tgt.removeEventListener('pointercancel', up); refresh(true); };
-  tgt.addEventListener('pointermove', move); tgt.addEventListener('pointerup', up); tgt.addEventListener('pointercancel', up);
+  }, () => { dragPPS = 0; refresh(true); });
 }

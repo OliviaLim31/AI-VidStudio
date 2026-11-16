@@ -1,55 +1,80 @@
-/* AI-VidStudio · inspector.js */
+/* AI-VidStudio · inspector.js — right-hand panel: 片段 · 文字 · 字幕 · 贴纸 · 声音 */
 'use strict';
-/* ---------- inspector helpers ---------- */
+/* ---------- helpers ---------- */
 function numRange(label, val, min, max, step, onInput) {
-  const row = document.createElement('div'); row.className = 'row';
+  const row = el('div', 'row');
   row.innerHTML = `<label>${label}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${val}"><input type="number" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
   const [r, n] = row.querySelectorAll('input'); let started = false;
-  const h = (a, b) => () => { const v = parseFloat(a.value); if (isNaN(v)) return; if (!started) { commit(); started = true; } b.value = v; onInput(v); save(); renderTimeline(); lastKey = ''; applyFrame(true); };
+  const h = (a, b) => () => { const v = parseFloat(a.value); if (isNaN(v)) return; if (!started) { commit(); started = true; } b.value = v; onInput(v); save(); renderTimeline(); markStage(); applyFrame(true); };
   r.addEventListener('input', h(r, n)); n.addEventListener('input', h(n, r));
   const done = () => { started = false; renderInspector(); };
   r.addEventListener('change', done); n.addEventListener('change', done);
   return row;
 }
 function selectRow(label, val, options, onChange) {
-  const row = document.createElement('div'); row.className = 'row';
+  const row = el('div', 'row');
   row.innerHTML = `<label>${label}</label><select>${options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
   const sel = row.querySelector('select'); sel.value = String(val);
   sel.addEventListener('change', () => { commit(); onChange(sel.value); refresh(true); });
   return row;
 }
 function checks(label, items) {
-  const row = document.createElement('div'); row.className = 'row';
-  row.innerHTML = `<label>${label}</label><div class="inline"></div>`;
+  const row = el('div', 'row'); row.innerHTML = `<label>${label}</label><div class="inline"></div>`;
   for (const [text, val, fn] of items) {
-    const l = document.createElement('label'); l.className = 'chk';
-    l.innerHTML = `<input type="checkbox" ${val ? 'checked' : ''}> ${text}`;
+    const l = el('label', 'chk'); l.innerHTML = `<input type="checkbox" ${val ? 'checked' : ''}> ${text}`;
     l.querySelector('input').addEventListener('change', e => { commit(); fn(e.target.checked); refresh(true); });
     row.querySelector('.inline').appendChild(l);
   }
   return row;
 }
 function colorRow(label, items) {
-  const row = document.createElement('div'); row.className = 'row';
-  row.innerHTML = `<label>${label}</label><div class="inline"></div>`;
+  const row = el('div', 'row'); row.innerHTML = `<label>${label}</label><div class="inline"></div>`;
   for (const [text, val, fn] of items) {
-    const w = document.createElement('label'); w.className = 'chk';
-    w.innerHTML = `<input type="color" value="${val}"> <span class="hint">${text}</span>`;
+    const w = el('label', 'chk'); w.innerHTML = `<input type="color" value="${val}"> <span class="hint">${text}</span>`;
     const inp = w.querySelector('input'); let started = false;
-    inp.addEventListener('input', () => { if (!started) { commit(); started = true; } fn(inp.value); save(); lastKey = ''; applyFrame(false); });
-    inp.addEventListener('change', () => { started = false; });
+    inp.addEventListener('input', () => { if (!started) { commit(); started = true; } fn(inp.value); save(); markStage(); applyFrame(true); });
+    inp.addEventListener('change', () => { started = false; renderTimeline(); });
     row.querySelector('.inline').appendChild(w);
   }
   return row;
 }
-const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 function button(text, fn, cls = 'btn small') { const b = el('button', cls); b.textContent = text; b.addEventListener('click', fn); return b; }
+function textArea(val, onInput, rows = 2) {
+  const ta = el('textarea'); ta.value = val; ta.rows = rows;
+  ta.addEventListener('focus', () => commit(), { once: true });
+  ta.addEventListener('input', () => { onInput(ta.value); save(); markStage(); applyFrame(false); renderTimeline(); });
+  return ta;
+}
+const fontOptions = () => Object.entries(FONTS).map(([k, f]) => [k, f.label]);
 
-/* ---------- inspector ---------- */
+/* ---------- panel switch ---------- */
 function renderInspector() {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('stage').dataset.tab = tab;
   const box = $('inspector'); box.innerHTML = '';
-  if (tab === 'seg') segPanel(box); else if (tab === 'text') textPanel(box); else audioPanel(box);
+  ({ seg: segPanel, text: textPanel, cap: capPanel, stk: stkPanel, audio: audioPanel }[tab] || segPanel)(box);
+}
+
+/* ---------- 片段 ---------- */
+function coverContent(f, aspect) { const w = Math.max(f.w, f.h / aspect); return { x: r2((f.w - w) / 2), y: r2((f.h - w * aspect) / 2), w: r2(w) }; }
+const FRAME_PRESETS = {
+  full: { label: '全屏', f: { x: 0, y: 0, w: 1080, h: 1920, rot: 0, r: 0, bw: 0, bc: '#ffffff', shadow: false, fill: '#000000' }, bg: 'black' },
+  phone: { label: '手机录屏框', f: { x: 40, y: 380, w: 1000, h: 1400, rot: 0, r: 48, bw: 0, bc: '#ffffff', shadow: true, fill: '#ffffff' }, bg: 'lav', top: true },
+  letterbox: { label: '横拍黑边', f: { x: 0, y: 656, w: 1080, h: 608, rot: 0, r: 0, bw: 0, bc: '#ffffff', shadow: false, fill: '#000000' }, bg: 'black' },
+  polaroid: { label: '倾斜相框', f: { x: 150, y: 420, w: 780, h: 980, rot: -4, r: 14, bw: 18, bc: '#ffffff', shadow: true, fill: '#ffffff' }, bg: 'pink' },
+  pip: { label: '子母画面小框', f: { x: 600, y: 300, w: 400, h: 540, rot: 3, r: 28, bw: 8, bc: '#ffffff', shadow: true, fill: '#ffffff' }, bg: null },
+  focus: { label: '放大重点 ×2', zoom: 2 }
+};
+function applyFramePreset(seg, key) {
+  const p = FRAME_PRESETS[key], a = project.sources[seg.src].aspect;
+  if (p.zoom) { zoomContent(seg, p.zoom); return; }
+  seg.frame = clone(p.f);
+  seg.content = p.top ? { x: 0, y: 0, w: seg.frame.w } : coverContent(seg.frame, a);
+  if (p.bg) seg.bg = p.bg;
+}
+function zoomContent(seg, k) { // scale the picture inside the frame around the frame centre
+  const f = seg.frame, c = seg.content, cx = f.w / 2, cy = f.h / 2;
+  c.x = r2(cx - (cx - c.x) * k); c.y = r2(cy - (cy - c.y) * k); c.w = r2(c.w * k);
 }
 function segPanel(box) {
   const seg = project.segments[selSeg]; const src = project.sources[seg.src];
@@ -59,12 +84,28 @@ function segPanel(box) {
   name.addEventListener('input', () => { seg.name = name.value; save(); renderTimeline(); });
   head.appendChild(name); box.appendChild(head);
   box.appendChild(el('div', 'hint', `长度 ${segDur(seg).toFixed(2)} 秒 · 从第 ${segStart(selSeg).toFixed(1)} 秒开始`));
+
+  if (selSeg > 0) {
+    const sec = el('div', 'card'); sec.id = 'transSection';
+    sec.appendChild(el('h3', null, '✨ 进场转场（上一段 → 这一段）'));
+    const tr = seg.trans || (seg.trans = { type: 'none', dur: 0.5 });
+    const grid = el('div', 'presets');
+    for (const [k, label] of TRANSITIONS) {
+      const b = el('span', 'preset' + (tr.type === k ? ' on' : ''), escapeHtml(label));
+      b.addEventListener('click', () => { commit(); tr.type = k; refresh(true); seek(segStart(selSeg) + 0.01); setTimeout(() => { if (!playing) { gTime = Math.max(0, segStart(selSeg) - 0.6); setPlaying(true); } }, 50); });
+      grid.appendChild(b);
+    }
+    sec.appendChild(grid);
+    if (tr.type !== 'none') sec.appendChild(numRange('转场时长(秒)', tr.dur || 0.5, 0.2, 1.5, 0.05, v => { tr.dur = v; }));
+    sec.appendChild(el('div', 'hint', '点一下就会预览。转场会让前后两段重叠，总长度会稍微变短。'));
+    box.appendChild(sec);
+  }
+
   box.appendChild(el('h3', null, '画面'));
   box.appendChild(selectRow('素材', seg.src, Object.entries(project.sources).map(([k, s]) => [k, s.label]), v => {
-    seg.src = v; const d = project.sources[v].dur; seg.in = Math.min(seg.in, d - 0.2); if (!seg.freeze) seg.out = Math.min(Math.max(seg.out, seg.in + 0.2), d); else seg.out = seg.in + (seg.out - seg.in);
-    seg.layout = project.sources[v].screen ? 'phone' : 'full'; if (seg.layout === 'phone' && seg.cropY == null) seg.cropY = 60;
+    seg.src = v; const d = project.sources[v].dur; seg.in = Math.min(seg.in, d - 0.2); if (!seg.freeze) seg.out = Math.min(Math.max(seg.out, seg.in + 0.2), d);
+    seg.content = coverContent(seg.frame, project.sources[v].aspect);
   }));
-  box.appendChild(selectRow('版面', seg.layout, [['full', '全屏'], ['phone', '手机录屏（紫色背景）']], v => { seg.layout = v; if (v === 'phone' && seg.cropY == null) seg.cropY = 60; }));
   if (seg.freeze) {
     box.appendChild(numRange('定格画面(秒)', r2(seg.in), 0, r2(src.dur - 0.05), 0.05, v => { const d = seg.out - seg.in; seg.in = v; seg.out = v + d; }));
     box.appendChild(numRange('定格时长', r2(seg.out - seg.in), 0.3, 10, 0.1, v => { seg.out = seg.in + v; }));
@@ -73,21 +114,32 @@ function segPanel(box) {
     box.appendChild(numRange('结束(秒)', r2(seg.out), 0.1, r2(src.dur), 0.05, v => { seg.out = Math.max(v, seg.in + 0.1); }));
     box.appendChild(numRange('速度(倍)', seg.speed || 1, 0.25, 4, 0.05, v => { seg.speed = Math.max(0.25, v); }));
   }
-  box.appendChild(el('h3', null, '画面位置'));
-  box.appendChild(el('div', 'hint', '也可以直接在左边画面上拖动影片（拖到正中会自动对齐）。'));
-  box.appendChild(numRange('缩放(%)', Math.round((seg.vs || 1) * 100), 20, 250, 1, v => { seg.vs = v / 100; }));
-  box.appendChild(numRange('左右', seg.vx || 0, -1080, 1080, 1, v => { seg.vx = v; }));
-  box.appendChild(numRange('上下', seg.vy || 0, -1920, 1920, 1, v => { seg.vy = v; }));
-  if (seg.layout === 'phone') {
-    box.appendChild(numRange('手机框高度', seg.ph || 1400, 300, 2400, 1, v => { seg.ph = v; }));
-    box.appendChild(numRange('录屏内容上下', seg.cropY || 0, 0, 1500, 1, v => { seg.cropY = v; }));
-  } else {
-    box.appendChild(selectRow('空白处背景', seg.bgc || 'black', [['black', '黑色'], ['lav', '薰衣草紫']], v => { seg.bgc = v; }));
-  }
-  const rp = el('div', 'inline');
-  rp.appendChild(button('画面复位', () => { commit(); seg.vs = 1; seg.vx = 0; seg.vy = 0; if (seg.layout === 'phone') seg.ph = 1400; refresh(true); }));
-  rp.appendChild(button('套用到所有同版面片段', () => { commit(); project.segments.forEach(o => { if (o !== seg && o.layout === seg.layout) { o.vs = seg.vs; o.vx = seg.vx; o.vy = seg.vy; if (seg.layout === 'phone') o.ph = seg.ph; else o.bgc = seg.bgc; } }); refresh(true); toast('已套用'); }));
-  box.appendChild(rp);
+
+  box.appendChild(el('h3', null, '🖼 画面框'));
+  const pr = el('div', 'presets');
+  for (const [k, p] of Object.entries(FRAME_PRESETS)) pr.appendChild(button(p.label, () => { commit(); applyFramePreset(seg, k); refresh(true); }, 'preset'));
+  box.appendChild(pr);
+  const mode = el('div', 'inline'); mode.style.margin = '8px 0';
+  mode.appendChild(el('span', 'hint', '在画面上拖动：'));
+  for (const [k, label] of [['frame', '移动框'], ['content', '移动框里的画面']]) mode.appendChild(button(label, () => { frameMode = k; renderInspector(); applyFrame(false); }, 'btn small' + (frameMode === k ? ' primary' : '')));
+  box.appendChild(mode);
+  box.appendChild(el('div', 'hint', '拖四个角 = 整个放大缩小；拖四条边 = 裁切框的长宽；上面的圆点 = 转角度。'));
+  const f = seg.frame, c = seg.content;
+  box.appendChild(numRange('框里画面缩放(%)', Math.round(c.w / f.w * 100), 20, 500, 1, v => { zoomContent(seg, (v / 100 * f.w) / c.w); }));
+  box.appendChild(numRange('框宽', Math.round(f.w), 40, 1600, 1, v => { const cx = f.x + f.w / 2; f.w = v; f.x = r2(cx - v / 2); }));
+  box.appendChild(numRange('框高', Math.round(f.h), 40, 2400, 1, v => { const cy = f.y + f.h / 2; f.h = v; f.y = r2(cy - v / 2); }));
+  box.appendChild(numRange('框左右', Math.round(f.x + f.w / 2), -400, 1480, 1, v => { f.x = r2(v - f.w / 2); }));
+  box.appendChild(numRange('框上下', Math.round(f.y + f.h / 2), -400, 2320, 1, v => { f.y = r2(v - f.h / 2); }));
+  box.appendChild(numRange('角度(°)', f.rot || 0, -180, 180, 1, v => { f.rot = v; }));
+  box.appendChild(numRange('圆角', f.r || 0, 0, 300, 1, v => { f.r = v; }));
+  box.appendChild(numRange('边框粗细', f.bw || 0, 0, 60, 1, v => { f.bw = v; }));
+  box.appendChild(colorRow('颜色', [['边框', f.bc || '#ffffff', v => f.bc = v], ['框底', f.fill || '#000000', v => f.fill = v]]));
+  box.appendChild(checks('效果', [['阴影', !!f.shadow, v => { f.shadow = v; }]]));
+  box.appendChild(selectRow('画布背景', seg.bg || 'black', [['black', '黑色'], ['lav', '薰衣草紫'], ['pink', '粉红渐层'], ['cream', '奶油白'], ['white', '白色']], v => { seg.bg = v; }));
+  const ap = el('div', 'inline');
+  ap.appendChild(button('套用这个画面框到所有片段', () => { commit(); project.segments.forEach(o => { if (o === seg) return; o.frame = clone(seg.frame); o.content = coverContent(o.frame, project.sources[o.src].aspect); o.bg = seg.bg; }); refresh(true); toast('已套用到所有片段'); }));
+  box.appendChild(ap);
+
   box.appendChild(el('h3', null, '其他'));
   box.appendChild(checks('选项', [
     ['定格', seg.freeze, v => { if (v) { seg.freeze = true; seg.out = seg.in + Math.min(2.6, Math.max(0.3, segDur(seg))); } else { seg.freeze = false; seg.out = Math.min(seg.in + 2, src.dur); seg.speed = 1; } }],
@@ -95,11 +147,12 @@ function segPanel(box) {
     ['原声', !!seg.sound, v => { seg.sound = v; }]
   ]));
   box.appendChild(selectRow('进场音效', seg.sfx || 'none', [['none', '无'], ['whoosh', 'Whoosh 咻'], ['pop', 'Pop 啵']], v => { seg.sfx = v; }));
-  box.appendChild(el('h3', null, '这个片段的文字'));
   const n = (seg.texts || []).length;
-  const r = el('div', 'inline'); r.appendChild(el('span', 'hint', n ? `${n} 段文字` : '没有文字'));
-  r.appendChild(button('去编辑文字 →', () => { tab = 'text'; renderInspector(); })); box.appendChild(r);
+  const r = el('div', 'inline'); r.appendChild(el('span', 'hint', n ? `这个片段有 ${n} 段文字` : '这个片段没有文字'));
+  r.appendChild(button('去编辑文字 →', () => { tab = 'text'; renderInspector(); applyFrame(false); })); box.appendChild(r);
 }
+
+/* ---------- 文字 (per clip) ---------- */
 function applyStyle(t, st) { for (const k of ['font', 'color', 'bg', 'bgColor', 'stroke', 'strokeColor', 'shadow']) if (st[k] !== undefined) t[k] = st[k]; if (st.size) t.size = st.size; }
 function textPanel(box) {
   const seg = project.segments[selSeg];
@@ -107,16 +160,12 @@ function textPanel(box) {
   head.appendChild(el('h2', null, `片段 ${selSeg + 1} 的文字`));
   head.appendChild(button('＋ 加文字', () => { commit(); seg.texts = seg.texts || []; const st = project.styles[0] || {}; const t = { text: 'New text', size: 72, x: 540, y: 820, rot: 0, start: 0, end: 99, font: 'display-black', color: '#ffffff', bg: 'pill', bgColor: '#5b2ba8', stroke: 0, strokeColor: '#000000', shadow: true }; applyStyle(t, st); t.size = 72; seg.texts.push(t); selText = seg.texts.length - 1; refresh(true); }));
   box.appendChild(head);
-  box.appendChild(el('div', 'hint', '在左边时间轴选别的片段，就能编辑那个片段的文字。'));
+  box.appendChild(el('div', 'hint', '这里的文字跟着片段走（转场时会一起移动）。想做一字一跳的字幕，用"字幕"分页。'));
   if (!(seg.texts || []).length) box.appendChild(el('p', 'hint', '这个片段还没有文字，按"＋ 加文字"。'));
   (seg.texts || []).forEach((t, k) => {
     const card = el('div', 'card' + (k === selText ? ' sel' : ''));
-    card.addEventListener('pointerdown', () => { if (selText !== k) { selText = k; document.querySelectorAll('.card').forEach((c, j) => c.classList.toggle('sel', j === k)); lastKey = ''; applyFrame(false); } });
-    const ta = el('textarea'); ta.value = t.text; ta.rows = 2; ta.dataset.ta = k;
-    ta.addEventListener('focus', () => commit(), { once: true });
-    ta.addEventListener('input', () => { t.text = ta.value; save(); lastKey = ''; applyFrame(false); });
-    card.appendChild(ta);
-    // presets
+    card.addEventListener('pointerdown', () => { if (selText !== k) { selText = k; document.querySelectorAll('.card').forEach((x, j) => x.classList.toggle('sel', j === k)); markStage(); applyFrame(false); } });
+    const ta = textArea(t.text, v => { t.text = v; }); ta.dataset.ta = k; card.appendChild(ta);
     const pr = el('div', 'row'); pr.appendChild(el('label', null, '我的风格'));
     const pw = el('div', 'presets');
     project.styles.forEach((st, si) => {
@@ -127,13 +176,9 @@ function textPanel(box) {
       x.addEventListener('click', () => { commit(); project.styles.splice(si, 1); refresh(true); });
       p.appendChild(x); pw.appendChild(p);
     });
-    pw.appendChild(button('＋ 存成我的风格', () => {
-      commit(); const nm = (t.text.split('\n')[0] || '风格').slice(0, 10);
-      project.styles.push({ name: '我的 ' + nm, font: t.font, color: t.color, bg: t.bg, bgColor: t.bgColor, stroke: t.stroke, strokeColor: t.strokeColor, shadow: t.shadow, size: t.size });
-      refresh(true); toast('已存成"我的风格"，其他文字一键就能套用');
-    }));
+    pw.appendChild(button('＋ 存成我的风格', () => { commit(); const nm = (t.text.split('\n')[0] || '风格').slice(0, 10); project.styles.push({ name: '我的 ' + nm, font: t.font, color: t.color, bg: t.bg, bgColor: t.bgColor, stroke: t.stroke, strokeColor: t.strokeColor, shadow: t.shadow, size: t.size }); refresh(true); toast('已存成"我的风格"'); }));
     pr.appendChild(pw); card.appendChild(pr);
-    card.appendChild(selectRow('字体', t.font, Object.entries(FONTS).map(([k2, f]) => [k2, f.label]), v => { t.font = v; }));
+    card.appendChild(selectRow('字体', t.font, fontOptions(), v => { t.font = v; }));
     card.appendChild(numRange('字号', t.size, 16, 260, 1, v => { t.size = v; }));
     card.appendChild(colorRow('颜色', [['字', t.color, v => t.color = v], ['底', t.bgColor, v => t.bgColor = v], ['描边', t.strokeColor, v => t.strokeColor = v]]));
     card.appendChild(selectRow('底的形状', t.bg, [['pill', '圆角胶囊'], ['box', '方块'], ['none', '没有底']], v => { t.bg = v; }));
@@ -147,15 +192,85 @@ function textPanel(box) {
     card.appendChild(numRange('消失(秒)', r2(Math.min(t.end, d)), 0, r2(d), 0.05, v => { t.end = v >= d - 0.01 ? 99 : v; }));
     const acts = el('div', 'inline');
     acts.appendChild(button('置中', () => { commit(); t.x = 540; t.rot = 0; refresh(true); }));
-    acts.appendChild(button('复制这段', () => { commit(); const c = clone(t); c.y += 120; seg.texts.splice(k + 1, 0, c); selText = k + 1; refresh(true); }));
+    acts.appendChild(button('复制这段', () => { commit(); const cp = clone(t); cp.y += 120; seg.texts.splice(k + 1, 0, cp); selText = k + 1; refresh(true); }));
     acts.appendChild(button('删除', () => { commit(); seg.texts.splice(k, 1); selText = -1; refresh(true); }));
     card.appendChild(acts);
     box.appendChild(card);
   });
-  box.appendChild(el('p', 'hint', '提示：Enter 换行。时间是"这个片段内"的秒数。在画面上双击文字会跳到这里。'));
 }
+
+/* ---------- 字幕 (word-by-word captions) ---------- */
+function capPanel(box) {
+  const head = el('div', 'inline'); head.style.justifyContent = 'space-between';
+  head.appendChild(el('h2', null, '💬 一字一跳字幕'));
+  head.appendChild(button('＋ 加字幕', () => { commit(); project.captions.push(newCaption()); selCap = project.captions.length - 1; refresh(true); }, 'btn small primary'));
+  box.appendChild(head);
+  box.appendChild(el('div', 'hint', '把讲稿打进去，<b>重点字前后加 *</b>，例如 <code>vibe *coding* using Picsart</code>。字幕会在开始和结束时间之间，按字数自动分配。'));
+  if (!project.captions.length) { box.appendChild(el('p', 'hint', '还没有字幕。')); return; }
+  project.captions.forEach((c, j) => {
+    const card = el('div', 'card' + (j === selCap ? ' sel' : ''));
+    card.addEventListener('pointerdown', () => { if (selCap !== j) { selCap = j; document.querySelectorAll('.card').forEach((x, q) => x.classList.toggle('sel', q === j)); renderTimeline(); markStage(); applyFrame(false); } });
+    const rb = () => buildCaption(c);
+    card.appendChild(textArea(c.text, v => { c.text = v; rb(); }, 3));
+    card.appendChild(numRange('开始(秒)', r2(c.start), 0, r2(Math.max(total(), c.end)), 0.05, v => { c.start = Math.min(v, c.end - 0.2); rb(); }));
+    card.appendChild(numRange('结束(秒)', r2(c.end), 0.2, r2(Math.max(total(), c.end) + 2), 0.05, v => { c.end = Math.max(v, c.start + 0.2); rb(); }));
+    const voices = project.audio.filter(a => a.kind === 'voice');
+    if (voices.length) card.appendChild(selectRow('对齐到人声', '', [['', '— 选一段人声 —'], ...voices.map(a => [a.id, a.name])], v => { const a = voices.find(x => x.id === v); if (a) { c.start = r2(a.start); c.end = r2(a.start + clipDur(a)); rb(); } }));
+    card.appendChild(numRange('每次几个字', c.per, 1, 6, 1, v => { c.per = v; rb(); }));
+    card.appendChild(selectRow('字体', c.font, fontOptions(), v => { c.font = v; rb(); }));
+    card.appendChild(numRange('字号', c.size, 30, 160, 1, v => { c.size = v; rb(); }));
+    card.appendChild(colorRow('颜色', [['字', c.color, v => { c.color = v; rb(); }], ['重点底', c.hiBg, v => { c.hiBg = v; rb(); }], ['重点字', c.hiText, v => { c.hiText = v; rb(); }], ['描边', c.strokeColor, v => { c.strokeColor = v; rb(); }]]));
+    card.appendChild(numRange('描边粗细', c.stroke, 0, 16, 1, v => { c.stroke = v; rb(); }));
+    card.appendChild(checks('效果', [['全部大写', !!c.upper, v => { c.upper = v; rb(); }], ['阴影', !!c.shadow, v => { c.shadow = v; rb(); }], ['跳出动画', c.anim === 'pop', v => { c.anim = v ? 'pop' : 'none'; }]]));
+    card.appendChild(numRange('上下位置', c.y, -100, 1900, 1, v => { c.y = v; }));
+    card.appendChild(numRange('左右位置', c.x, 0, 1080, 1, v => { c.x = v; }));
+    const list = el('div', 'hint'); list.innerHTML = (c.chunks || []).map(ch => `${ch.t0.toFixed(1)}s · ${escapeHtml(ch.words)}`).join('<br>');
+    card.appendChild(list);
+    const acts = el('div', 'inline');
+    acts.appendChild(button('复制', () => { commit(); const cp = clone(c); cp.id = uid('c'); cp.start = r2(c.end); cp.end = r2(c.end + (c.end - c.start)); buildCaption(cp); project.captions.splice(j + 1, 0, cp); selCap = j + 1; refresh(true); }));
+    acts.appendChild(button('删除', () => { commit(); project.captions.splice(j, 1); selCap = -1; refresh(true); }));
+    card.appendChild(acts);
+    box.appendChild(card);
+  });
+}
+
+/* ---------- 贴纸 ---------- */
+function stkPanel(box) {
+  box.appendChild(el('h2', null, '✨ 贴纸'));
+  box.appendChild(el('div', 'hint', '点一下就加到画面中间（从播放头开始 2.5 秒）。在画面上可以拖动、转角度、放大缩小。'));
+  const grid = el('div', 'stk-grid');
+  for (const [k, def] of Object.entries(STICKERS)) {
+    const b = el('button', 'stk-btn'); b.innerHTML = stickerThumb(k) + `<span>${def.label}</span>`;
+    const sv = b.querySelector('svg'); sv.removeAttribute('width'); sv.removeAttribute('height');
+    b.addEventListener('click', () => { commit(); project.stickers.push(newSticker(k)); selStk = project.stickers.length - 1; refresh(true); });
+    grid.appendChild(b);
+  }
+  box.appendChild(grid);
+  project.stickers.forEach((st, j) => {
+    const def = STICKERS[st.type] || { label: st.type };
+    const card = el('div', 'card' + (j === selStk ? ' sel' : ''));
+    card.addEventListener('pointerdown', () => { if (selStk !== j) { selStk = j; document.querySelectorAll('.card').forEach((x, q) => x.classList.toggle('sel', q === j)); renderTimeline(); markStage(); applyFrame(false); } });
+    card.appendChild(el('b', null, escapeHtml(def.label)));
+    const rb = () => buildSticker(st);
+    if (def.text !== undefined) card.appendChild(textArea(st.text, v => { st.text = v; rb(); }, st.type === 'notes' ? 2 : 1));
+    card.appendChild(colorRow('颜色', [['主色', st.color, v => { st.color = v; rb(); }]]));
+    card.appendChild(numRange('大小', st.scale, 0.1, 4, 0.01, v => { st.scale = v; }));
+    card.appendChild(numRange('角度(°)', st.rot || 0, -180, 180, 1, v => { st.rot = v; }));
+    card.appendChild(numRange('开始(秒)', r2(st.start), 0, r2(Math.max(total(), st.end)), 0.05, v => { st.start = Math.min(v, st.end - 0.2); }));
+    card.appendChild(numRange('结束(秒)', r2(st.end), 0.2, r2(Math.max(total(), st.end) + 2), 0.05, v => { st.end = Math.max(v, st.start + 0.2); }));
+    card.appendChild(selectRow('动画', st.anim || 'none', [['none', '不动'], ['twinkle', '闪烁'], ['float', '上下飘'], ['wiggle', '左右摇'], ['spin', '旋转'], ['click', '点击（鼠标用）']], v => { st.anim = v; }));
+    card.appendChild(checks('进场', [['弹出', !!st.popIn, v => { st.popIn = v; }]]));
+    const acts = el('div', 'inline');
+    acts.appendChild(button('复制', () => { commit(); const cp = clone(st); cp.id = uid('k'); cp.x += 60; cp.y += 60; project.stickers.splice(j + 1, 0, cp); selStk = j + 1; refresh(true); }));
+    acts.appendChild(button('删除', () => { commit(); project.stickers.splice(j, 1); selStk = -1; refresh(true); }));
+    card.appendChild(acts);
+    box.appendChild(card);
+  });
+}
+
+/* ---------- 声音 ---------- */
 function audioPanel(box) {
-  box.appendChild(el('h2', null, '声音'));
+  box.appendChild(el('h2', null, '🎵 声音'));
   box.appendChild(numRange('影片原声音量', project.mix.videoVolume, 0, 1.5, 0.05, v => { project.mix.videoVolume = v; }));
   const up = el('div', 'inline'); up.style.margin = '8px 0';
   for (const [kind, label] of [['voice', '🎙 上传人声 / 配音'], ['music', '🎵 上传音乐']]) {
@@ -165,7 +280,7 @@ function audioPanel(box) {
     fb.appendChild(inp); up.appendChild(fb);
   }
   box.appendChild(up);
-  box.appendChild(el('div', 'hint', '🎙 网页不能直接开麦克风：先用手机"语音备忘录"录好，再上传。<br>🎵 音乐请用有授权的（例如 Picsart 音乐库、YouTube Audio Library），热门歌建议在 IG 里加。<br>⚠️ 渲染时要把同一个声音文件也发给 Claude。'));
+  box.appendChild(el('div', 'hint', '🎙 网页不能直接开麦克风：先用手机"语音备忘录"录好，再上传。<br>🎵 音乐请用有授权的，热门歌建议在 IG 里加。<br>⚠️ 渲染时要把同一个声音文件也发给 Claude。'));
   if (!project.audio.length) { box.appendChild(el('p', 'hint', '还没有声音素材。')); return; }
   project.audio.forEach((c, j) => {
     const card = el('div', 'card' + (j === selAudio ? ' sel' : ''));
@@ -173,7 +288,7 @@ function audioPanel(box) {
     const h = el('div', 'inline'); h.appendChild(el('b', null, (c.kind === 'voice' ? '🎙 人声' : '🎵 音乐'))); const nm = el('span', 'hint'); nm.textContent = c.name; h.appendChild(nm);
     card.appendChild(h);
     if (!hasFile(c)) {
-      const w = el('div', 'warn', '这台设备上找不到这个文件，请重新选一次同一个文件：'); card.appendChild(w);
+      card.appendChild(el('div', 'warn', '这台设备上找不到这个文件，请重新选一次同一个文件：'));
       const fb = el('span', 'btn small filebtn', '重新选文件'); const inp = el('input'); inp.type = 'file'; inp.accept = 'audio/*,video/*';
       inp.addEventListener('change', () => { if (inp.files[0]) relinkAudio(c, inp.files[0]); }); fb.appendChild(inp); card.appendChild(fb);
     }

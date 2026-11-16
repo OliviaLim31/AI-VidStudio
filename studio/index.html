@@ -23,14 +23,15 @@
 <main>
   <section class="panel stage-wrap">
     <div class="stage" id="stage">
-      <div class="layer full" id="fullLayer"></div>
-      <div class="layer phonebg" id="phoneLayer" style="display:none"><div class="phone" id="phone"></div></div>
+      <div class="layer" id="slots"></div>
+      <div class="layer" id="transFx"></div>
+      <div class="layer" id="ovLayer"></div>
+      <div id="frameUI"></div>
       <div class="layer" id="safeLayer">
         <div class="safe" style="left:0;right:0;top:0;height:11.5%"></div>
         <div class="safe" style="left:0;right:0;bottom:0;height:21%"></div>
         <div class="safe" style="right:0;width:13%;top:45%;height:34%"></div>
       </div>
-      <div class="layer" id="textLayer"></div>
       <div class="guide" id="guide"></div>
       <div class="hguide" id="hguide"></div>
     </div>
@@ -43,13 +44,15 @@
     <div class="inline" style="justify-content:center">
       <label class="chk"><input type="checkbox" id="safeChk"> 显示 IG 遮挡区</label>
     </div>
-    <div class="hint" style="text-align:center">点文字选中 → 拖动可移到任何位置；黄色圆点：转角度 / 放大缩小<br>拖动文字以外的地方 = 移动影片画面</div>
+    <div class="hint" style="text-align:center">点一下选中（文字 / 字幕 / 贴纸），再拖动；黄色圆点：转角度 / 放大缩小<br>在"片段"分页：拖框的角、边可以改大小和长宽</div>
   </section>
 
   <section class="panel" id="inspectorPanel">
     <div class="tabs">
       <button class="tab" data-tab="seg">🎞 片段</button>
       <button class="tab" data-tab="text">🔤 文字</button>
+      <button class="tab" data-tab="cap">💬 字幕</button>
+      <button class="tab" data-tab="stk">✨ 贴纸</button>
       <button class="tab" data-tab="audio">🎵 声音</button>
     </div>
     <div id="inspector"></div>
@@ -120,6 +123,8 @@
 <script src="js/data.js"></script>
 <script src="js/core.js"></script>
 <script src="js/media.js"></script>
+<script src="js/stickers.js"></script>
+<script src="js/captions.js"></script>
 <script src="js/stage.js"></script>
 <script src="js/timeline.js"></script>
 <script src="js/inspector.js"></script>

@@ -39,7 +39,7 @@ $('savesBtn').onclick = async () => {
       const x = d.data(); const row = el('div', 'saveitem');
       const info = el('div'); info.innerHTML = `<b>${fmtTime(x.savedAt)}</b> <span class="hint">· ${x.label || ''} · ${x.total || '?'} 秒</span>`;
       row.appendChild(info);
-      row.appendChild(button('打开', () => { try { commit(); project = JSON.parse(x.json); selSeg = 0; selText = -1; selAudio = -1; project.audio.forEach(c => { attachAudio(c); loadBlob(c); }); refresh(true); $('savesModal').classList.remove('on'); toast('已打开 ' + fmtTime(x.savedAt) + ' 的存档'); } catch (e) { toast('这个存档读不了'); } }));
+      row.appendChild(button('打开', () => { try { commit(); project = migrate(JSON.parse(x.json)); selSeg = 0; selText = -1; selAudio = -1; project.audio.forEach(c => { attachAudio(c); loadBlob(c); }); refresh(true); $('savesModal').classList.remove('on'); toast('已打开 ' + fmtTime(x.savedAt) + ' 的存档'); } catch (e) { toast('这个存档读不了'); } }));
       list.appendChild(row);
     });
   } catch (e) { list.innerHTML = '<p class="hint">暂时读不到存档，请稍后再试。</p>'; }
